@@ -11,10 +11,15 @@
             "mode": "debug",
             "program": "${workspaceFolder}",
             "args":[
-                "install-auth-portal",
-                "--secrets-file-path=/Users/marcboorshtein/Documents/Documents/customers/hsbc/v2/hsbcv2/secret.txt",
-                "/Users/marcboorshtein/Documents/Documents/customers/hsbc/v2/hsbcv2/hsbc-satelite-2.yaml"
-            ]
+                "install-satelite",
+                "--orchestra-chart=/Users/marcboorshtein/git-local/helm-charts/orchestra",
+                "/Users/marcboorshtein/Documents/Documents/customers/hsbc/v2/hsbcv2/hsbc-satelite-2.yaml",
+                "hsbc-v2-cp", 
+                "kubernetes-admin@kubernetes"
+            ],
+            "env": {
+                "KUBECONFIG": "/tmp/kube-config"
+            }
         }
     ]
 }

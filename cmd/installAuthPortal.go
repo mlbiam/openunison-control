@@ -11,13 +11,6 @@ import (
 	"github.com/tremolosecurity/openunison-control/openunison"
 )
 
-var operatorImage string
-var operatorDeployCrd bool
-var operatorChart string
-
-var orchestraChart string
-var orchestraLoginPortalChart string
-var pathToValuesYaml string
 var secretFile string
 
 // installAuthPortalCmd represents the installAuthPortal command

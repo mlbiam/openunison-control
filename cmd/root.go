@@ -23,6 +23,15 @@ var rootCmd = &cobra.Command{
 // namespace for openunison
 var namespace string
 
+var operatorImage string
+var operatorDeployCrd bool
+var operatorChart string
+
+var orchestraChart string
+var orchestraLoginPortalChart string
+var pathToValuesYaml string
+var addClusterChart string
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
