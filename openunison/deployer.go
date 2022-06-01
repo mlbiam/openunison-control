@@ -308,6 +308,21 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 		}
 
 		idpCert = string(ouTlsKey.Data["tls.crt"])
+	} else {
+		trustedCerts, ok := keyStore["trusted_certificates"].([]interface{})
+		if ok {
+			for _, c := range trustedCerts {
+				cert := c.(map[string]interface{})
+				if cert["name"] == "unison-ca" {
+					bytes, err := base64.StdEncoding.DecodeString(cert["pem_data"].(string))
+					if err != nil {
+						return err
+					}
+
+					idpCert = string(bytes)
+				}
+			}
+		}
 	}
 
 	fmt.Printf("IdP Certificate : %v\n", idpCert)
@@ -338,18 +353,36 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 	//add the idp's certificate
 	if idpCert != "" {
 
-		trustedCert := make(map[string]string)
-		trustedCert["name"] = "trusted-idp"
-		trustedCert["pem_b64"] = base64.StdEncoding.EncodeToString([]byte(idpCert))
-
 		trustedCerts, ok := helmValues["trusted_certs"].([]interface{})
 		if !ok {
 			trustedCerts = make([]interface{}, 0)
 		}
 
-		trustedCerts = append(trustedCerts, trustedCert)
+		foundCert := false
 
-		helmValues["trusted_certs"] = trustedCerts
+		b64Cert := base64.StdEncoding.EncodeToString([]byte(idpCert))
+
+		for _, c := range trustedCerts {
+			cert := c.(map[string]interface{})
+			if cert["name"] == "trusted-idp" {
+				cert["pem_b64"] = b64Cert
+				foundCert = true
+				break
+			} else if cert["pem_b64"] == b64Cert {
+				foundCert = true
+				break
+			}
+		}
+
+		if !foundCert {
+			trustedCert := make(map[string]string)
+			trustedCert["name"] = "trusted-idp"
+			trustedCert["pem_b64"] = b64Cert
+
+			trustedCerts = append(trustedCerts, trustedCert)
+
+			helmValues["trusted_certs"] = trustedCerts
+		}
 
 	}
 
@@ -426,6 +459,17 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 
 	if err != nil {
 		return true, err
+	}
+
+	if helmValues["openunison"].(map[string]interface{})["az_groups"] != nil {
+		satelateAzGroups := helmValues["openunison"].(map[string]interface{})["az_groups"].([]interface{})
+		cpAzGroups := make([]string, len(satelateAzGroups))
+
+		for i, group := range satelateAzGroups {
+			cpAzGroups[i] = string(group.(string))
+		}
+
+		cpValues["cluster"].(map[string]interface{})["az_groups"] = cpAzGroups
 	}
 
 	_, err = ou.setCurrentContext(ou.controlPlaneContextName)
@@ -817,7 +861,8 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 	}
 
 	// wait until the orchestra container is running
-
+	fmt.Printf("Waiting for a few seconds for the operator to run")
+	time.Sleep(5 * time.Second)
 	err = waitForDeployment(ou, "openunison-orchestra")
 	if err != nil {
 		return err
@@ -912,6 +957,7 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 }
 
 func waitForDeployment(ou *OpenUnisonDeployment, deploymentName string) error {
+
 	running := false
 
 	for i := 0; i < 200; i++ {
@@ -923,8 +969,16 @@ func waitForDeployment(ou *OpenUnisonDeployment, deploymentName string) error {
 			return err
 		}
 
+		labels := ""
+
+		for key, value := range dep.Spec.Selector.MatchLabels {
+			labels = labels + key + "=" + value + ","
+		}
+
+		labels = labels[0 : len(labels)-1]
+		fmt.Printf("Looking for labels '%v'\n", labels)
 		options := metav1.ListOptions{
-			LabelSelector: "app=openunison-orchestra",
+			LabelSelector: labels,
 		}
 
 		pods, err := ou.clientset.CoreV1().Pods(ou.namespace).List(context.TODO(), options)
@@ -935,9 +989,9 @@ func waitForDeployment(ou *OpenUnisonDeployment, deploymentName string) error {
 
 		numPods := len(pods.Items)
 
-		fmt.Printf("Ready : %v\n", numPods)
+		fmt.Printf("Total Pods : %v, Ready Pods : %v\n", numPods, dep.Status.ReadyReplicas)
 
-		if int32(numPods) == *dep.Spec.Replicas {
+		if *dep.Spec.Replicas <= dep.Status.ReadyReplicas && int32(numPods) == *dep.Spec.Replicas {
 			running = true
 			break
 		}
