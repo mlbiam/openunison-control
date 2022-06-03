@@ -29,15 +29,22 @@ var installAuthPortalCmd = &cobra.Command{
 
 		pathToValuesYaml = args[0]
 
-		openunisonDeployment, err := openunison.NewOpenUnisonDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile)
+		openunisonDeployment, err := openunison.NewOpenUnisonDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, clusterManagementChart, pathToDbPassword, pathToSmtpPassword)
 
 		if err != nil {
 			panic(err)
 		}
 
-		err = openunisonDeployment.DeployAuthPortal()
-		if err != nil {
-			panic(err)
+		if openunisonDeployment.IsNaas() {
+			err = openunisonDeployment.DeployNaaSPortal()
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			err = openunisonDeployment.DeployAuthPortal()
+			if err != nil {
+				panic(err)
+			}
 		}
 
 	},
@@ -58,6 +65,10 @@ func init() {
 	installAuthPortalCmd.PersistentFlags().StringVarP(&orchestraChart, "orchestra-chart", "c", "tremolo/orchestra", "Helm chart of the orchestra portal")
 	installAuthPortalCmd.PersistentFlags().StringVarP(&orchestraLoginPortalChart, "orchestra-login-portal-chart", "l", "tremolo/orchestra-login-portal", "Helm chart for the orchestra login portal")
 	installAuthPortalCmd.PersistentFlags().StringVarP(&secretFile, "secrets-file-path", "s", "", "Path to file containing the authentication secret")
+
+	installAuthPortalCmd.PersistentFlags().StringVarP(&clusterManagementChart, "cluster-management-chart", "m", "tremolo/openunison-k8s-cluster-management", "Helm chart for enabling cluster management")
+	installAuthPortalCmd.PersistentFlags().StringVarP(&pathToDbPassword, "database-secret-path", "b", "", "Path to file containing the database password")
+	installAuthPortalCmd.PersistentFlags().StringVarP(&pathToSmtpPassword, "smtp-secret-path", "t", "", "Path to file containing the smtp password")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:

@@ -30,7 +30,12 @@ var operatorChart string
 var orchestraChart string
 var orchestraLoginPortalChart string
 var pathToValuesYaml string
+
 var addClusterChart string
+
+var clusterManagementChart string
+var pathToDbPassword string
+var pathToSmtpPassword string
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.

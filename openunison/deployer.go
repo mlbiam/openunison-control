@@ -59,11 +59,27 @@ type OpenUnisonDeployment struct {
 	controlPlaneContextName string
 	satelateContextName     string
 	addClusterChart         string
+
+	clusterManagementChart string
+	pathToDbPassword       string
+	pathToSmtpPassword     string
+
+	helmValues map[string]interface{}
 }
 
 // creates a new deployment structure
-func NewOpenUnisonDeployment(namespace string, operatorImage string, operatorDeployCrd bool, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string) (*OpenUnisonDeployment, error) {
-	return NewSateliteDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "")
+func NewOpenUnisonDeployment(namespace string, operatorImage string, operatorDeployCrd bool, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, clusterManagementChart string, pathToDbPassword string, pathToSmtpPassword string) (*OpenUnisonDeployment, error) {
+	ou, err := NewSateliteDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "")
+
+	if err != nil {
+		return nil, err
+	}
+
+	ou.clusterManagementChart = clusterManagementChart
+	ou.pathToDbPassword = pathToDbPassword
+	ou.pathToSmtpPassword = pathToSmtpPassword
+
+	return ou, nil
 }
 
 // creates a new deployment structure
@@ -90,7 +106,47 @@ func NewSateliteDeployment(namespace string, operatorImage string, operatorDeplo
 		return nil, err
 	}
 
+	err = ou.loadHelmValues()
+
+	if err != nil {
+		return nil, err
+	}
+
 	return ou, nil
+}
+
+func (ou *OpenUnisonDeployment) loadHelmValues() error {
+	fmt.Printf("Loading values from %s...\n", ou.pathToValuesYaml)
+
+	yamlValues, err := ioutil.ReadFile(ou.pathToValuesYaml)
+
+	if err != nil {
+		return err
+	}
+
+	ou.helmValues = make(map[string]interface{})
+
+	err = yaml.Unmarshal(yamlValues, &ou.helmValues)
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("...loaded\n")
+
+	return nil
+}
+
+func (ou *OpenUnisonDeployment) IsNaas() bool {
+	openunison, ok := ou.helmValues["openunison"].(map[string]interface{})
+
+	if !ok {
+		return false
+	}
+
+	enableProvisioning := openunison["enable_provisioning"].(bool)
+
+	return enableProvisioning
 }
 
 // set the current k8s context
@@ -144,6 +200,137 @@ func (ou *OpenUnisonDeployment) loadKubernetesConfiguration() error {
 	return nil
 }
 
+// deploy a NaaS Portal
+
+func (ou *OpenUnisonDeployment) DeployNaaSPortal() error {
+
+	openunison := ou.helmValues["openunison"].(map[string]interface{})
+	enableProvisioning := openunison["enable_provisioning"].(bool)
+
+	if !enableProvisioning {
+		return fmt.Errorf("openunison.enableProvisioning MUST be true")
+	}
+
+	externalEnabled := false
+
+	naas, found := openunison["naas"].(map[string]interface{})
+	if found {
+		groups, found := naas["groups"].(map[string]interface{})
+		if found {
+			external, found := groups["external"].(map[string]interface{})
+			if found {
+				externalEnabled, found = external["enabled"].(bool)
+			}
+		}
+	}
+
+	useStdJit, found := openunison["use_standard_jit_workflow"].(bool)
+
+	if !found {
+		useStdJit = true
+	}
+
+	if externalEnabled && useStdJit {
+		return fmt.Errorf("openunison.naas.groups.external is true, openunison.use_standard_jit_workflow MUST be false")
+	}
+
+	_, ok := ou.helmValues["database"]
+
+	if !ok {
+		return fmt.Errorf("no database section to your values.yaml")
+	}
+
+	_, ok = ou.helmValues["smtp"]
+
+	if !ok {
+		return fmt.Errorf("no smtp section to your values.yaml")
+	}
+
+	err := ou.DeployAuthPortal()
+
+	if err != nil {
+		return err
+	}
+
+	// deploy the operator
+	settings := cli.New()
+	actionConfig := new(action.Configuration)
+
+	if err := actionConfig.Init(settings.RESTClientGetter(), ou.namespace, os.Getenv("HELM_DRIVER"), log.Printf); err != nil {
+		return err
+	}
+
+	listClient := action.NewList(actionConfig)
+
+	clusterManagementChartDeployed := false
+
+	listClient.All = true
+	releases, err := listClient.Run()
+
+	for _, release := range releases {
+		if release.Name == "cluster-management" && release.Namespace == ou.namespace {
+			clusterManagementChartDeployed = true
+		}
+	}
+
+	//if !openunisonDeployed {
+	fmt.Print("Deploying the Cluster Management chart\n")
+
+	if !clusterManagementChartDeployed {
+		fmt.Println("Chart not deployed, installing")
+		client := action.NewInstall(actionConfig)
+
+		client.Namespace = ou.namespace
+		client.ReleaseName = "cluster-management"
+
+		cp, err := client.ChartPathOptions.LocateChart(ou.clusterManagementChart, settings)
+
+		if err != nil {
+			return err
+		}
+
+		chartReq, err := loader.Load(cp)
+
+		if err != nil {
+			return err
+		}
+
+		mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
+
+		_, err = client.Run(chartReq, mergedValues)
+
+		if err != nil {
+			return err
+		}
+	} else {
+		fmt.Println("Chart deployed, upgrading")
+		client := action.NewUpgrade(actionConfig)
+
+		client.Namespace = ou.namespace
+
+		cp, err := client.ChartPathOptions.LocateChart(ou.clusterManagementChart, settings)
+
+		if err != nil {
+			return err
+		}
+
+		chartReq, err := loader.Load(cp)
+
+		if err != nil {
+			return err
+		}
+
+		mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
+		_, err = client.Run("cluster-management", chartReq, mergedValues)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // deploys an OpenUnison satelite
 func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
@@ -155,27 +342,9 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
 	ou.loadKubernetesConfiguration()
 
-	fmt.Printf("Loading values from %s...\n", ou.pathToValuesYaml)
-
-	yamlValues, err := ioutil.ReadFile(ou.pathToValuesYaml)
-
-	if err != nil {
-		return err
-	}
-
-	helmValues := make(map[string]interface{})
-
-	err = yaml.Unmarshal(yamlValues, &helmValues)
-
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("...loaded\n")
-
 	// get the satelite cluster name
 
-	clusterName, ok := helmValues["k8s_cluster_name"].(string)
+	clusterName, ok := ou.helmValues["k8s_cluster_name"].(string)
 
 	if !ok {
 		return fmt.Errorf("k8s_cluster_name must be defined in the satalite values.yaml")
@@ -348,12 +517,12 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
 	oidcConfig["claims"] = claims
 
-	helmValues["oidc"] = oidcConfig
+	ou.helmValues["oidc"] = oidcConfig
 
 	//add the idp's certificate
 	if idpCert != "" {
 
-		trustedCerts, ok := helmValues["trusted_certs"].([]interface{})
+		trustedCerts, ok := ou.helmValues["trusted_certs"].([]interface{})
 		if !ok {
 			trustedCerts = make([]interface{}, 0)
 		}
@@ -381,12 +550,12 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
 			trustedCerts = append(trustedCerts, trustedCert)
 
-			helmValues["trusted_certs"] = trustedCerts
+			ou.helmValues["trusted_certs"] = trustedCerts
 		}
 
 	}
 
-	dataToWrite, err := yaml.Marshal(&helmValues)
+	dataToWrite, err := yaml.Marshal(&ou.helmValues)
 
 	if err != nil {
 		return err
@@ -394,7 +563,7 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
 	ioutil.WriteFile(ou.pathToValuesYaml, dataToWrite, 0)
 
-	shouldReturn, returnValue := ou.integrateSatelite(helmValues, clusterName, err, sateliteIntegrated, actionConfig, satelateReleaseName, settings)
+	shouldReturn, returnValue := ou.integrateSatelite(ou.helmValues, clusterName, err, sateliteIntegrated, actionConfig, satelateReleaseName, settings)
 	if shouldReturn {
 		return returnValue
 	}
@@ -534,49 +703,11 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 	return false, nil
 }
 
-// deploys OpenUnison into the cluster
-func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
-
-	fmt.Printf("Loading values from %s...\n", ou.pathToValuesYaml)
-
-	yamlValues, err := ioutil.ReadFile(ou.pathToValuesYaml)
-
-	if err != nil {
-		return err
-	}
-
-	helmValues := make(map[string]interface{})
-
-	err = yaml.Unmarshal(yamlValues, &helmValues)
-
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("...loaded\n")
-
-	// check the kubernetes dashboard ns exists
-
-	dashboardNamespace := "kubernetes-dashboard"
-
-	dashboardConfig, ok := helmValues["dashboard"].(map[interface{}]interface{})
-	if ok {
-
-		dashboardNamespace = dashboardConfig["namespace"].(string)
-	}
-
-	ou.checkNamespace("Dashboard", dashboardNamespace)
-
-	// check the openunison namespace exists, if not, create it
-
-	ou.checkNamespace("OpenUnison", ou.namespace)
-
-	// create the orchestra-secrets-source
-
+// set the secret
+func (ou *OpenUnisonDeployment) setupSecret(helmValues map[string]interface{}) error {
 	secret, err := ou.clientset.CoreV1().Secrets(ou.namespace).Get(context.TODO(), "orchestra-secrets-source", metav1.GetOptions{})
-
+	foundSecret := false
 	if err != nil {
-		// secret doesn't exist, need to create it
 		secret = &v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "orchestra-secrets-source",
@@ -588,75 +719,150 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 		// generate the standard keys
 		secret.Data["unisonKeystorePassword"] = []byte(randSeq((64)))
 		secret.Data["K8S_DB_SECRET"] = []byte(randSeq((64)))
+	} else {
+		foundSecret = true
+	}
 
-		hasSecret := ou.secretFile != "" || ou.secret != ""
+	hasSecret := ou.secretFile != "" || ou.secret != ""
 
-		var authSecret []byte
+	var authSecret []byte
 
-		if hasSecret {
-			if ou.secret != "" {
-				authSecret = []byte(ou.secret)
-			} else {
-				authSecret, err = ioutil.ReadFile(ou.secretFile)
-				if err != nil {
-					return err
-				}
+	if hasSecret {
+		if ou.secret != "" {
+			authSecret = []byte(ou.secret)
+		} else {
+			authSecret, err = ioutil.ReadFile(ou.secretFile)
+			if err != nil {
+				return err
 			}
-
 		}
 
-		authNeedsSecret := false
-		authSecretLabel := ""
-		foundAuth := false
+	}
 
-		_, ok = helmValues["oidc"]
+	authNeedsSecret := false
+	authSecretLabel := ""
+	foundAuth := false
+
+	_, ok := helmValues["oidc"]
+
+	if ok {
+		authNeedsSecret = true
+		foundAuth = true
+		authSecretLabel = "OIDC_CLIENT_SECRET"
+	} else {
+		_, ok = helmValues["github"]
 
 		if ok {
-			authNeedsSecret = true
 			foundAuth = true
-			authSecretLabel = "OIDC_CLIENT_SECRET"
+			authNeedsSecret = true
+			authSecretLabel = "GITHUB_SECRET_ID"
 		} else {
-			_, ok = helmValues["github"]
+			_, ok = helmValues["active_directory"]
 
 			if ok {
-				foundAuth = true
 				authNeedsSecret = true
-				authSecretLabel = "GITHUB_SECRET_ID"
+				foundAuth = true
+				authSecretLabel = "AD_BIND_PASSWORD"
 			} else {
-				_, ok = helmValues["active_directory"]
+				_, ok = helmValues["saml"]
+				authNeedsSecret = false
+				foundAuth = true
 
-				if ok {
-					authNeedsSecret = true
-					foundAuth = true
-					authSecretLabel = "AD_BIND_PASSWORD"
-				} else {
-					_, ok = helmValues["saml"]
-					authNeedsSecret = false
-					foundAuth = true
-
-				}
 			}
 		}
+	}
 
-		if !foundAuth {
-			return fmt.Errorf("No authentication found, one of active_directory, github, oidc, saml required")
-		}
+	if !foundAuth {
+		return fmt.Errorf("No authentication found, one of active_directory, github, oidc, saml required")
+	}
 
+	_, ok = secret.Data[authSecretLabel]
+
+	if !ok {
+		// there's not already a secret
 		if authNeedsSecret && !hasSecret {
 			return fmt.Errorf("Authentication type requires a secret in a file specified in -s or --secrets-file-path")
 		}
+	}
 
+	if authNeedsSecret {
 		secret.Data[authSecretLabel] = authSecret
+	}
 
+	openunison := helmValues["openunison"].(map[string]interface{})
+	enableNaaS := openunison["enable_provisioning"].(bool)
+
+	if enableNaaS {
+		//check for the database password
+		_, hasJdbcPassword := secret.Data["OU_JDBC_PASSWORD"]
+		if ou.pathToDbPassword != "" {
+			dbSecret, err := ioutil.ReadFile(ou.pathToDbPassword)
+			if err != nil {
+				return err
+			}
+
+			fmt.Println("Setting database password\n")
+
+			secret.Data["OU_JDBC_PASSWORD"] = dbSecret
+		} else if !hasJdbcPassword {
+			return fmt.Errorf("if openunison.enable_provisioning is true, -b or --database-secret-path must be set")
+		}
+
+		// check for SMTP
+		_, hasSmtpPassword := secret.Data["SMTP_PASSWORD"]
+		if ou.pathToSmtpPassword != "" {
+			smtpSecret, err := ioutil.ReadFile(ou.pathToSmtpPassword)
+			if err != nil {
+				return err
+			}
+
+			fmt.Println("Setting SMTP password")
+			secret.Data["SMTP_PASSWORD"] = smtpSecret
+		} else if !hasSmtpPassword {
+			return fmt.Errorf("if openunison.enable_provisioning is true, -t or --smtp-secret-path must be set")
+		}
+	}
+
+	if !foundSecret {
+		fmt.Printf("Creating secret\n")
 		secret, err = ou.clientset.CoreV1().Secrets(ou.namespace).Create(context.TODO(), secret, metav1.CreateOptions{})
-
 		if err != nil {
 			return err
-		} else {
-			fmt.Println("Secret created")
 		}
 	} else {
-		fmt.Print("Secret already exists\n")
+		fmt.Printf("Updating secret\n")
+		secret, err = ou.clientset.CoreV1().Secrets(ou.namespace).Update(context.TODO(), secret, metav1.UpdateOptions{})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+
+}
+
+// deploys OpenUnison into the cluster
+func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
+	// check the kubernetes dashboard ns exists
+
+	dashboardNamespace := "kubernetes-dashboard"
+
+	dashboardConfig, ok := ou.helmValues["dashboard"].(map[interface{}]interface{})
+	if ok {
+
+		dashboardNamespace = dashboardConfig["namespace"].(string)
+	}
+
+	ou.checkNamespace("Dashboard", dashboardNamespace)
+
+	// check the openunison namespace exists, if not, create it
+
+	ou.checkNamespace("OpenUnison", ou.namespace)
+
+	err := ou.setupSecret(ou.helmValues)
+
+	if err != nil {
+		return err
 	}
 
 	// deploy the operator
@@ -803,7 +1009,7 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 			return err
 		}
 
-		mergedValues := mergeMaps(chartReq.Values, helmValues)
+		mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
 
 		_, deployErr = client.Run(chartReq, mergedValues)
 
@@ -828,7 +1034,7 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 			return err
 		}
 
-		mergedValues := mergeMaps(chartReq.Values, helmValues)
+		mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
 
 		_, deployErr = client.Run("orchestra", chartReq, mergedValues)
 	}
@@ -892,7 +1098,7 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 			return err
 		}
 
-		mergedValues := mergeMaps(chartReq.Values, helmValues)
+		mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
 
 		_, err = client.Run(chartReq, mergedValues)
 
@@ -931,7 +1137,7 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 			return err
 		}
 
-		mergedValues := mergeMaps(chartReq.Values, helmValues)
+		mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
 
 		_, err = client.Run("orchestra-login-portal", chartReq, mergedValues)
 
