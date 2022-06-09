@@ -64,12 +64,14 @@ type OpenUnisonDeployment struct {
 	pathToDbPassword       string
 	pathToSmtpPassword     string
 
+	pathToSaveSateliteValues string
+
 	helmValues map[string]interface{}
 }
 
 // creates a new deployment structure
 func NewOpenUnisonDeployment(namespace string, operatorImage string, operatorDeployCrd bool, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, clusterManagementChart string, pathToDbPassword string, pathToSmtpPassword string) (*OpenUnisonDeployment, error) {
-	ou, err := NewSateliteDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "")
+	ou, err := NewSateliteDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "", "")
 
 	if err != nil {
 		return nil, err
@@ -83,7 +85,7 @@ func NewOpenUnisonDeployment(namespace string, operatorImage string, operatorDep
 }
 
 // creates a new deployment structure
-func NewSateliteDeployment(namespace string, operatorImage string, operatorDeployCrd bool, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string) (*OpenUnisonDeployment, error) {
+func NewSateliteDeployment(namespace string, operatorImage string, operatorDeployCrd bool, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string) (*OpenUnisonDeployment, error) {
 	ou := &OpenUnisonDeployment{}
 
 	ou.namespace = namespace
@@ -100,6 +102,8 @@ func NewSateliteDeployment(namespace string, operatorImage string, operatorDeplo
 	ou.controlPlaneContextName = controlPlanContextName
 	ou.satelateContextName = sateliteContextName
 	ou.addClusterChart = addClusterChart
+
+	ou.pathToSaveSateliteValues = pathToSateliteYaml
 
 	err := ou.loadKubernetesConfiguration()
 	if err != nil {
@@ -138,7 +142,11 @@ func (ou *OpenUnisonDeployment) loadHelmValues() error {
 }
 
 func (ou *OpenUnisonDeployment) IsNaas() bool {
-	openunison, ok := ou.helmValues["openunison"].(map[string]interface{})
+	return isNaasFromHelm(ou.helmValues)
+}
+
+func isNaasFromHelm(helm map[string]interface{}) bool {
+	openunison, ok := helm["openunison"].(map[string]interface{})
 
 	if !ok {
 		return false
@@ -437,6 +445,32 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 	host := hosts[0].(map[string]interface{})
 	names := host["names"].([]interface{})
 
+	nonSecretData := spec["non_secret_data"].([]interface{})
+
+	naasEnabled := false
+	naasGroupsInternal := false
+	naasGroupsExternal := false
+
+	naasInternalSuffix := ""
+	naasExternalSuffix := ""
+
+	for _, nsd := range nonSecretData {
+		nonSecret := nsd.(map[string]interface{})
+		nsdName := nonSecret["name"].(string)
+
+		if nsdName == "OPENUNISON_PROVISIONING_ENABLED" {
+			naasEnabled = nonSecret["value"].(string) == "true"
+		} else if nsdName == "openunison.naas.external" {
+			naasGroupsExternal = nonSecret["value"].(string) == "true"
+		} else if nsdName == "openunison.naas.internal" {
+			naasGroupsInternal = nonSecret["value"].(string) == "true"
+		} else if nsdName == "openunison.naas.external-suffix" {
+			naasExternalSuffix = nonSecret["value"].(string)
+		} else if nsdName == "openunison.naas.internal-suffix" {
+			naasInternalSuffix = nonSecret["value"].(string)
+		}
+	}
+
 	idpHostName := ""
 
 	for _, n := range names {
@@ -519,6 +553,8 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
 	ou.helmValues["oidc"] = oidcConfig
 
+	trustedCertAlias := "trusted-idp"
+
 	//add the idp's certificate
 	if idpCert != "" {
 
@@ -539,6 +575,7 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 				break
 			} else if cert["pem_b64"] == b64Cert {
 				foundCert = true
+				trustedCertAlias = cert["name"].(string)
 				break
 			}
 		}
@@ -555,15 +592,56 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
 	}
 
+	managementProxyUrl := ""
+	externalNaasGroupName := ""
+
+	if naasEnabled {
+		openunison := ou.helmValues["openunison"].(map[string]interface{})
+		mgmtProxy, ok := openunison["management_proxy"].(map[string]interface{})
+
+		if ok {
+			fmt.Printf("Management proxy enabled\n")
+			mgmtEnabled, ok := mgmtProxy["enabled"]
+			if ok && mgmtEnabled == true {
+				// set remote configuration
+				managementProxyUrl = mgmtProxy["host"].(string)
+				remote := make(map[string]string)
+				remote["issuer"] = fmt.Sprintf("https://%v/auth/idp/remotek8s", idpHostName)
+				if idpCert != "" {
+					remote["cert_alias"] = trustedCertAlias
+				}
+				mgmtProxy["remote"] = remote
+
+				azRules := make([]interface{}, 2)
+
+				azRules[0] = fmt.Sprintf("k8s-namespace-administrators-k8s-%v-*", clusterName)
+				azRules[1] = fmt.Sprintf("k8s-namespace-viewer-k8s-%v-*", clusterName)
+
+				if naasGroupsInternal {
+					azRules = append(azRules, fmt.Sprintf("k8s-cluster-k8s-%v-administrators%v", clusterName, naasInternalSuffix))
+				}
+
+				if naasGroupsExternal {
+					azRules = append(azRules, fmt.Sprintf("k8s-cluster-k8s-%v-administrators%v", clusterName, naasExternalSuffix))
+					externalNaasGroupName = mgmtProxy["external_admin_group"].(string)
+					mgmtProxy["external_suffix"] = naasExternalSuffix
+				}
+
+				openunison["az_groups"] = azRules
+
+			}
+		}
+	}
+
 	dataToWrite, err := yaml.Marshal(&ou.helmValues)
 
 	if err != nil {
 		return err
 	}
 
-	ioutil.WriteFile(ou.pathToValuesYaml, dataToWrite, 0)
+	ioutil.WriteFile(ou.pathToValuesYaml, dataToWrite, 0644)
 
-	shouldReturn, returnValue := ou.integrateSatelite(ou.helmValues, clusterName, err, sateliteIntegrated, actionConfig, satelateReleaseName, settings)
+	shouldReturn, returnValue := ou.integrateSatelite(ou.helmValues, clusterName, err, sateliteIntegrated, actionConfig, satelateReleaseName, settings, nil, "", "")
 	if shouldReturn {
 		return returnValue
 	}
@@ -583,6 +661,52 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 		return err
 	}
 
+	if naasEnabled {
+		// if the naas is enabled, need to deploy management
+		targetCert := ""
+
+		trustedCerts, ok := ou.helmValues["trusted_certs"].([]interface{})
+		if ok {
+			for _, t := range trustedCerts {
+				trustedCert := t.(map[string]interface{})
+				certName := trustedCert["name"].(string)
+				if certName == "unison-ca" {
+					targetCert = trustedCert["pem_b64"].(string)
+				}
+			}
+		}
+
+		if targetCert == "" {
+			// not found, load the ou-tls-certificate secret
+			tlsSecret, err := ou.clientset.CoreV1().Secrets(ou.namespace).Get(context.TODO(), "ou-tls-certificate", metav1.GetOptions{})
+			if err == nil {
+				targetCert = base64.StdEncoding.EncodeToString(tlsSecret.Data["tls.crt"])
+			}
+		}
+
+		management := make(map[string]interface{})
+		management["enabled"] = true
+		target := make(map[string]interface{})
+		management["target"] = target
+
+		target["url"] = managementProxyUrl
+		target["tokenType"] = "oidc"
+		target["useToken"] = true
+
+		if targetCert != "" {
+			target["base64_certificate"] = targetCert
+		}
+
+		// redeployment satelite integration
+		ou.setCurrentContext(ou.controlPlaneContextName)
+		ou.loadKubernetesConfiguration()
+		shouldReturn, returnValue := ou.integrateSatelite(ou.helmValues, clusterName, err, sateliteIntegrated, actionConfig, satelateReleaseName, settings, management, naasExternalSuffix, externalNaasGroupName)
+		if shouldReturn {
+			return returnValue
+		}
+
+	}
+
 	// leave the kubeconfig the way we found it
 	ou.setCurrentContext(originalContextName)
 
@@ -592,7 +716,7 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 	return nil
 }
 
-func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interface{}, clusterName string, err error, sateliteIntegrated bool, actionConfig *action.Configuration, satelateReleaseName string, settings *cli.EnvSettings) (bool, error) {
+func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interface{}, clusterName string, err error, sateliteIntegrated bool, actionConfig *action.Configuration, satelateReleaseName string, settings *cli.EnvSettings, management map[string]interface{}, externalGroupNameSuffix string, externalGroupName string) (bool, error) {
 	cpYaml := `{
 		"cluster": {
 		  "name": "%v",
@@ -609,6 +733,7 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 		  "az_groups": [
 	  
 		  ]
+		  
 		}
 	  }`
 
@@ -630,6 +755,16 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 		return true, err
 	}
 
+	if management != nil {
+		cluster := cpValues["cluster"].(map[string]interface{})
+		cluster["management"] = management
+
+		if externalGroupName != "" {
+			cluster["external_group_name"] = externalGroupName
+			cluster["external_group_name_suffix"] = externalGroupNameSuffix
+		}
+	}
+
 	if helmValues["openunison"].(map[string]interface{})["az_groups"] != nil {
 		satelateAzGroups := helmValues["openunison"].(map[string]interface{})["az_groups"].([]interface{})
 		cpAzGroups := make([]string, len(satelateAzGroups))
@@ -639,6 +774,16 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 		}
 
 		cpValues["cluster"].(map[string]interface{})["az_groups"] = cpAzGroups
+	}
+
+	if ou.pathToSaveSateliteValues != "" {
+		dataToWrite, err := yaml.Marshal(&cpValues)
+
+		if err != nil {
+			return false, err
+		}
+
+		ioutil.WriteFile(ou.pathToSaveSateliteValues, dataToWrite, 0644)
 	}
 
 	_, err = ou.setCurrentContext(ou.controlPlaneContextName)
@@ -700,6 +845,7 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 			return true, err
 		}
 	}
+
 	return false, nil
 }
 
@@ -785,7 +931,7 @@ func (ou *OpenUnisonDeployment) setupSecret(helmValues map[string]interface{}) e
 		}
 	}
 
-	if authNeedsSecret {
+	if authNeedsSecret && hasSecret {
 		secret.Data[authSecretLabel] = authSecret
 	}
 
@@ -859,6 +1005,21 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 
 	ou.checkNamespace("OpenUnison", ou.namespace)
 
+	network := ou.helmValues["network"].(map[string]interface{})
+	ingressType := network["ingress_type"].(string)
+
+	if ingressType == "istio" {
+		fmt.Println("Enabling Istio on the openunison namespace")
+		ouNs, err := ou.clientset.CoreV1().Namespaces().Get(context.TODO(), ou.namespace, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+
+		ouNs.Labels["istio-injection"] = "enabled"
+		ou.clientset.CoreV1().Namespaces().Update(context.TODO(), ouNs, metav1.UpdateOptions{})
+
+	}
+
 	err := ou.setupSecret(ou.helmValues)
 
 	if err != nil {
@@ -880,6 +1041,7 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 	orchestraLoginPortalDeployed := false
 
 	listClient.All = true
+	listClient.Failed = true
 	releases, err := listClient.Run()
 
 	for _, release := range releases {
@@ -1040,6 +1202,7 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 	}
 
 	if deployErr != nil {
+
 		_, err = ou.clientset.CoreV1().Pods(ou.namespace).Get(context.TODO(), "test-orchestra-orchestra", metav1.GetOptions{})
 
 		if err == nil {
@@ -1061,6 +1224,8 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 
 			fmt.Println(str)
 			return nil
+		} else {
+			return deployErr
 		}
 
 		return err

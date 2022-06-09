@@ -33,7 +33,7 @@ var installSateliteCmd = &cobra.Command{
 		controlPlaneCtxName := args[1]
 		sateliteCtxName := args[2]
 
-		openunisonDeployment, err := openunison.NewSateliteDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, controlPlaneCtxName, sateliteCtxName, addClusterChart)
+		openunisonDeployment, err := openunison.NewSateliteDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, controlPlaneCtxName, sateliteCtxName, addClusterChart, pathToSateliteYaml)
 
 		if err != nil {
 			panic(err)
@@ -56,4 +56,6 @@ func init() {
 	installSateliteCmd.PersistentFlags().StringVarP(&orchestraChart, "orchestra-chart", "c", "tremolo/orchestra", "Helm chart of the orchestra portal")
 	installSateliteCmd.PersistentFlags().StringVarP(&orchestraLoginPortalChart, "orchestra-login-portal-chart", "l", "tremolo/orchestra-login-portal", "Helm chart for the orchestra login portal")
 	installSateliteCmd.PersistentFlags().StringVarP(&addClusterChart, "add-cluster-chart", "a", "tremolo/openunison-k8s-add-cluster", "Helm chart fir adding a cluster to OpenUnison")
+
+	installSateliteCmd.PersistentFlags().StringVarP(&pathToSateliteYaml, "save-satelite-values-path", "s", "", "If specified, the values generated for the satelite integration on the control plane are saved to this path")
 }

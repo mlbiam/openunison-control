@@ -14,7 +14,7 @@
                 "install-satelite",
                 "--orchestra-chart=/Users/marcboorshtein/git-local/helm-charts/orchestra",
                 "/Users/marcboorshtein/Documents/Documents/customers/hsbc/v2/hsbcv2/hsbc-satelite-2.yaml",
-                "hsbc-v2-cp", 
+                "ou-cp-test", 
                 "kubernetes-admin@kubernetes"
             ],
             "env": {
