@@ -9,9 +9,9 @@ env GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w" -o ./target/ouctl-$VERSIO
 env GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o ./target/ouctl-$VERSION-linux .
 env GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" -o ./target/ouctl-$VERSION-win.exe .
 
-upx ./target/ouctl-$VERSION-macos
-upx ./target/ouctl-$VERSION-linux
-upx ./target/ouctl-$VERSION-win.exe
+#upx ./target/ouctl-$VERSION-macos
+#upx ./target/ouctl-$VERSION-linux
+#upx ./target/ouctl-$VERSION-win.exe
 
 
 mkdir target/darwin
