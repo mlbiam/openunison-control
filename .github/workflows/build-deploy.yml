@@ -14,5 +14,5 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE }}
           role-session-name: ${{ secrets.SESSION_NAME }}
           aws-region: us-east-1
-      - run: ./depxml.sh ${{ secrets.S3_DIR }}
+      - run: ./build.sh ${{ secrets.S3_DIR }}
         
