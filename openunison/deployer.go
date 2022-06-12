@@ -12,6 +12,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -881,6 +882,8 @@ func (ou *OpenUnisonDeployment) setupSecret(helmValues map[string]interface{}) e
 			if err != nil {
 				return err
 			}
+
+			authSecret = []byte(strings.TrimSpace(string(authSecret)))
 		}
 
 	}
@@ -947,6 +950,8 @@ func (ou *OpenUnisonDeployment) setupSecret(helmValues map[string]interface{}) e
 				return err
 			}
 
+			dbSecret = []byte(strings.TrimSpace(string(dbSecret)))
+
 			fmt.Println("Setting database password\n")
 
 			secret.Data["OU_JDBC_PASSWORD"] = dbSecret
@@ -961,6 +966,8 @@ func (ou *OpenUnisonDeployment) setupSecret(helmValues map[string]interface{}) e
 			if err != nil {
 				return err
 			}
+
+			smtpSecret = []byte(strings.TrimSpace(string(smtpSecret)))
 
 			fmt.Println("Setting SMTP password")
 			secret.Data["SMTP_PASSWORD"] = smtpSecret
