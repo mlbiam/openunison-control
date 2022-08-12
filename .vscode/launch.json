@@ -12,13 +12,18 @@
             "program": "${workspaceFolder}",
             "args":[
                 "install-satelite",
-                "--orchestra-chart=/Users/marcboorshtein/git-local/helm-charts/orchestra",
-                "/Users/marcboorshtein/Documents/Documents/customers/hsbc/v2/hsbcv2/hsbc-satelite-2.yaml",
-                "ou-cp-test", 
+                "-c",
+                "/Users/marcboorshtein/git-local/helm-charts/orchestra",
+                "-r",
+                "kiali=/Users/marcboorshtein/git-local/helm-charts/openunison-kiali",
+                "-a",
+                "/Users/marcboorshtein/git-local/helm-charts/openunison-k8s-add-cluster",
+                "/Users/marcboorshtein/Documents/Documents/customers/hsbc/v2/hsbc-satelite-1.yaml",
+                "hsbc-v2-cp",
                 "kubernetes-admin@kubernetes"
             ],
             "env": {
-                "KUBECONFIG": "/tmp/kube-config"
+                "KUBECONFIG": "/tmp/kube-config-hsbc-sat1"
             }
         }
     ]
