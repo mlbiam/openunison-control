@@ -6,8 +6,10 @@ package cmd
 
 import (
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/tremolosecurity/openunison-control/openunison"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -39,6 +41,10 @@ var pathToSmtpPassword string
 
 var pathToSateliteYaml string
 
+var skipClusterManagement bool
+
+var additionalCharts *[]string
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
@@ -58,4 +64,19 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+}
+
+func parseChartSlices(additionalCharts *[]string) []openunison.HelmChartInfo {
+	var additionalChartsList []openunison.HelmChartInfo
+	for _, chartPair := range *additionalCharts {
+		split := strings.Split(chartPair, "=")
+		chart := openunison.HelmChartInfo{
+			Name:      split[0],
+			ChartPath: split[1],
+		}
+
+		additionalChartsList = append(additionalChartsList, chart)
+	}
+
+	return additionalChartsList
 }

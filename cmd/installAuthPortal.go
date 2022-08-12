@@ -29,7 +29,7 @@ var installAuthPortalCmd = &cobra.Command{
 
 		pathToValuesYaml = args[0]
 
-		openunisonDeployment, err := openunison.NewOpenUnisonDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, clusterManagementChart, pathToDbPassword, pathToSmtpPassword)
+		openunisonDeployment, err := openunison.NewOpenUnisonDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, clusterManagementChart, pathToDbPassword, pathToSmtpPassword, skipClusterManagement, parseChartSlices(additionalCharts))
 
 		if err != nil {
 			panic(err)
@@ -40,8 +40,19 @@ var installAuthPortalCmd = &cobra.Command{
 			if err != nil {
 				panic(err)
 			}
+
+			err = openunisonDeployment.DeployAdditionalCharts()
+			if err != nil {
+				panic(err)
+			}
+
 		} else {
 			err = openunisonDeployment.DeployAuthPortal()
+			if err != nil {
+				panic(err)
+			}
+
+			err = openunisonDeployment.DeployAdditionalCharts()
 			if err != nil {
 				panic(err)
 			}
@@ -69,6 +80,10 @@ func init() {
 	installAuthPortalCmd.PersistentFlags().StringVarP(&clusterManagementChart, "cluster-management-chart", "m", "tremolo/openunison-k8s-cluster-management", "Helm chart for enabling cluster management")
 	installAuthPortalCmd.PersistentFlags().StringVarP(&pathToDbPassword, "database-secret-path", "b", "", "Path to file containing the database password")
 	installAuthPortalCmd.PersistentFlags().StringVarP(&pathToSmtpPassword, "smtp-secret-path", "t", "", "Path to file containing the smtp password")
+
+	installAuthPortalCmd.PersistentFlags().BoolVarP(&skipClusterManagement, "skip-cluster-management", "k", false, "Set to true if skipping the clister management chart when openunison.enable_provisioning is true")
+
+	additionalCharts = installAuthPortalCmd.PersistentFlags().StringSliceP("additional-helm-charts", "r", []string{}, "Comma seperated list of chart=path to deploy additional charts after OpenUnison is deployed")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:

@@ -46,6 +46,12 @@ type OperatorDeployment struct {
 	chart     string
 }
 
+// for sting info about additional helm charts
+type HelmChartInfo struct {
+	Name      string
+	ChartPath string
+}
+
 // tracks the information about the deployment
 type OpenUnisonDeployment struct {
 	namespace                 string
@@ -67,12 +73,16 @@ type OpenUnisonDeployment struct {
 
 	pathToSaveSateliteValues string
 
+	skipClusterManagement bool
+
 	helmValues map[string]interface{}
+
+	additionalCharts []HelmChartInfo
 }
 
 // creates a new deployment structure
-func NewOpenUnisonDeployment(namespace string, operatorImage string, operatorDeployCrd bool, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, clusterManagementChart string, pathToDbPassword string, pathToSmtpPassword string) (*OpenUnisonDeployment, error) {
-	ou, err := NewSateliteDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "", "")
+func NewOpenUnisonDeployment(namespace string, operatorImage string, operatorDeployCrd bool, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, clusterManagementChart string, pathToDbPassword string, pathToSmtpPassword string, skipClusterManagement bool, additionalCharts []HelmChartInfo) (*OpenUnisonDeployment, error) {
+	ou, err := NewSateliteDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "", "", additionalCharts)
 
 	if err != nil {
 		return nil, err
@@ -81,12 +91,13 @@ func NewOpenUnisonDeployment(namespace string, operatorImage string, operatorDep
 	ou.clusterManagementChart = clusterManagementChart
 	ou.pathToDbPassword = pathToDbPassword
 	ou.pathToSmtpPassword = pathToSmtpPassword
+	ou.skipClusterManagement = skipClusterManagement
 
 	return ou, nil
 }
 
 // creates a new deployment structure
-func NewSateliteDeployment(namespace string, operatorImage string, operatorDeployCrd bool, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string) (*OpenUnisonDeployment, error) {
+func NewSateliteDeployment(namespace string, operatorImage string, operatorDeployCrd bool, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string, additionalCharts []HelmChartInfo) (*OpenUnisonDeployment, error) {
 	ou := &OpenUnisonDeployment{}
 
 	ou.namespace = namespace
@@ -105,6 +116,8 @@ func NewSateliteDeployment(namespace string, operatorImage string, operatorDeplo
 	ou.addClusterChart = addClusterChart
 
 	ou.pathToSaveSateliteValues = pathToSateliteYaml
+
+	ou.additionalCharts = additionalCharts
 
 	err := ou.loadKubernetesConfiguration()
 	if err != nil {
@@ -285,55 +298,60 @@ func (ou *OpenUnisonDeployment) DeployNaaSPortal() error {
 	//if !openunisonDeployed {
 	fmt.Print("Deploying the Cluster Management chart\n")
 
-	if !clusterManagementChartDeployed {
-		fmt.Println("Chart not deployed, installing")
-		client := action.NewInstall(actionConfig)
-
-		client.Namespace = ou.namespace
-		client.ReleaseName = "cluster-management"
-
-		cp, err := client.ChartPathOptions.LocateChart(ou.clusterManagementChart, settings)
-
-		if err != nil {
-			return err
-		}
-
-		chartReq, err := loader.Load(cp)
-
-		if err != nil {
-			return err
-		}
-
-		mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
-
-		_, err = client.Run(chartReq, mergedValues)
-
-		if err != nil {
-			return err
-		}
+	if ou.skipClusterManagement {
+		fmt.Println("Skipping cluster management chart")
 	} else {
-		fmt.Println("Chart deployed, upgrading")
-		client := action.NewUpgrade(actionConfig)
 
-		client.Namespace = ou.namespace
+		if !clusterManagementChartDeployed {
+			fmt.Println("Chart not deployed, installing")
+			client := action.NewInstall(actionConfig)
 
-		cp, err := client.ChartPathOptions.LocateChart(ou.clusterManagementChart, settings)
+			client.Namespace = ou.namespace
+			client.ReleaseName = "cluster-management"
 
-		if err != nil {
-			return err
-		}
+			cp, err := client.ChartPathOptions.LocateChart(ou.clusterManagementChart, settings)
 
-		chartReq, err := loader.Load(cp)
+			if err != nil {
+				return err
+			}
 
-		if err != nil {
-			return err
-		}
+			chartReq, err := loader.Load(cp)
 
-		mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
-		_, err = client.Run("cluster-management", chartReq, mergedValues)
+			if err != nil {
+				return err
+			}
 
-		if err != nil {
-			return err
+			mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
+
+			_, err = client.Run(chartReq, mergedValues)
+
+			if err != nil {
+				return err
+			}
+		} else {
+			fmt.Println("Chart deployed, upgrading")
+			client := action.NewUpgrade(actionConfig)
+
+			client.Namespace = ou.namespace
+
+			cp, err := client.ChartPathOptions.LocateChart(ou.clusterManagementChart, settings)
+
+			if err != nil {
+				return err
+			}
+
+			chartReq, err := loader.Load(cp)
+
+			if err != nil {
+				return err
+			}
+
+			mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
+			_, err = client.Run("cluster-management", chartReq, mergedValues)
+
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -455,6 +473,8 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 	naasInternalSuffix := ""
 	naasExternalSuffix := ""
 
+	naasRoles := make([]map[string]interface{}, 0)
+
 	for _, nsd := range nonSecretData {
 		nonSecret := nsd.(map[string]interface{})
 		nsdName := nonSecret["name"].(string)
@@ -469,7 +489,40 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 			naasExternalSuffix = nonSecret["value"].(string)
 		} else if nsdName == "openunison.naas.internal-suffix" {
 			naasInternalSuffix = nonSecret["value"].(string)
+		} else if nsdName == "openunison.naas.default-groups" {
+			enc, err := base64.StdEncoding.DecodeString(nonSecret["value"].(string))
+			if err != nil {
+				return err
+			}
+
+			var localRoles []map[string]interface{}
+
+			err = json.Unmarshal(enc, &localRoles)
+
+			if err != nil {
+				return err
+			}
+
+			naasRoles = append(naasRoles, localRoles...)
+
+		} else if nsdName == "openunison.naas.roles" {
+			enc, err := base64.StdEncoding.DecodeString(nonSecret["value"].(string))
+			if err != nil {
+				return err
+			}
+
+			var localRoles []map[string]interface{}
+
+			err = json.Unmarshal(enc, &localRoles)
+
+			if err != nil {
+				return err
+			}
+
+			naasRoles = append(naasRoles, localRoles...)
+
 		}
+
 	}
 
 	idpHostName := ""
@@ -613,10 +666,11 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 				}
 				mgmtProxy["remote"] = remote
 
-				azRules := make([]interface{}, 2)
+				azRules := make([]interface{}, len(naasRoles))
 
-				azRules[0] = fmt.Sprintf("k8s-namespace-administrators-k8s-%v-*", clusterName)
-				azRules[1] = fmt.Sprintf("k8s-namespace-viewer-k8s-%v-*", clusterName)
+				for i, role := range naasRoles {
+					azRules[i] = fmt.Sprintf("k8s-namespace-%v-k8s-%v-*", role["name"].(string), clusterName)
+				}
 
 				if naasGroupsInternal {
 					azRules = append(azRules, fmt.Sprintf("k8s-cluster-k8s-%v-administrators%v", clusterName, naasInternalSuffix))
@@ -642,7 +696,7 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
 	ioutil.WriteFile(ou.pathToValuesYaml, dataToWrite, 0644)
 
-	shouldReturn, returnValue := ou.integrateSatelite(ou.helmValues, clusterName, err, sateliteIntegrated, actionConfig, satelateReleaseName, settings, nil, "", "")
+	shouldReturn, returnValue := ou.integrateSatelite(ou.helmValues, clusterName, err, sateliteIntegrated, actionConfig, satelateReleaseName, settings, nil, "", "", naasRoles)
 	if shouldReturn {
 		return returnValue
 	}
@@ -658,6 +712,11 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 	ou.loadKubernetesConfiguration()
 	err = ou.DeployAuthPortal()
 
+	if err != nil {
+		return err
+	}
+
+	err = ou.DeployAdditionalCharts()
 	if err != nil {
 		return err
 	}
@@ -701,7 +760,7 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 		// redeployment satelite integration
 		ou.setCurrentContext(ou.controlPlaneContextName)
 		ou.loadKubernetesConfiguration()
-		shouldReturn, returnValue := ou.integrateSatelite(ou.helmValues, clusterName, err, sateliteIntegrated, actionConfig, satelateReleaseName, settings, management, naasExternalSuffix, externalNaasGroupName)
+		shouldReturn, returnValue := ou.integrateSatelite(ou.helmValues, clusterName, err, sateliteIntegrated, actionConfig, satelateReleaseName, settings, management, naasExternalSuffix, externalNaasGroupName, naasRoles)
 		if shouldReturn {
 			return returnValue
 		}
@@ -717,7 +776,7 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 	return nil
 }
 
-func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interface{}, clusterName string, err error, sateliteIntegrated bool, actionConfig *action.Configuration, satelateReleaseName string, settings *cli.EnvSettings, management map[string]interface{}, externalGroupNameSuffix string, externalGroupName string) (bool, error) {
+func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interface{}, clusterName string, err error, sateliteIntegrated bool, actionConfig *action.Configuration, satelateReleaseName string, settings *cli.EnvSettings, management map[string]interface{}, externalGroupNameSuffix string, externalGroupName string, naasRoles []map[string]interface{}) (bool, error) {
 	cpYaml := `{
 		"cluster": {
 		  "name": "%v",
@@ -776,6 +835,21 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 
 		cpValues["cluster"].(map[string]interface{})["az_groups"] = cpAzGroups
 	}
+
+	openunison := helmValues["openunison"].(map[string]interface{})
+
+	if openunison != nil {
+
+		if openunison["control_plane"] != nil {
+			controlPlane := openunison["control_plane"].(map[string]interface{})
+			additionalBadges := controlPlane["additional_badges"].([]interface{})
+			if additionalBadges != nil {
+				cpValues["cluster"].(map[string]interface{})["additional_badges"] = additionalBadges
+			}
+		}
+	}
+
+	cpValues["naasRoles"] = naasRoles
 
 	if ou.pathToSaveSateliteValues != "" {
 		dataToWrite, err := yaml.Marshal(&cpValues)
@@ -989,6 +1063,103 @@ func (ou *OpenUnisonDeployment) setupSecret(helmValues map[string]interface{}) e
 			return err
 		}
 	}
+
+	return nil
+
+}
+
+// deploys all extra charts
+func (ou *OpenUnisonDeployment) DeployAdditionalCharts() error {
+	for _, chart := range ou.additionalCharts {
+		err := ou.deployChart(chart)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// deploys additional charts after OpenUnison is running
+func (ou *OpenUnisonDeployment) deployChart(chart HelmChartInfo) error {
+	fmt.Printf("Deploying chart %s, %s\n", chart.Name, chart.ChartPath)
+
+	settings := cli.New()
+	actionConfig := new(action.Configuration)
+
+	if err := actionConfig.Init(settings.RESTClientGetter(), ou.namespace, os.Getenv("HELM_DRIVER"), log.Printf); err != nil {
+		return err
+	}
+
+	listClient := action.NewList(actionConfig)
+
+	found := false
+
+	listClient.All = true
+	listClient.Failed = true
+	releases, err := listClient.Run()
+
+	if err != nil {
+		return err
+	}
+
+	for _, release := range releases {
+		if release.Name == chart.Name && release.Namespace == ou.namespace {
+			found = true
+		}
+	}
+
+	if !found {
+		fmt.Println("Chart not deployed, installing")
+		client := action.NewInstall(actionConfig)
+
+		client.Namespace = ou.namespace
+		client.ReleaseName = chart.Name
+
+		cp, err := client.ChartPathOptions.LocateChart(chart.ChartPath, settings)
+
+		if err != nil {
+			return err
+		}
+
+		chartReq, err := loader.Load(cp)
+
+		if err != nil {
+			return err
+		}
+
+		_, err = client.Run(chartReq, ou.helmValues)
+
+		if err != nil {
+			return err
+		}
+
+	} else {
+		fmt.Println("Chart deployed, upgrading")
+		client := action.NewUpgrade(actionConfig)
+
+		client.Namespace = ou.namespace
+
+		cp, err := client.ChartPathOptions.LocateChart(chart.ChartPath, settings)
+
+		if err != nil {
+			return err
+		}
+
+		chartReq, err := loader.Load(cp)
+
+		if err != nil {
+			return err
+		}
+
+		_, err = client.Run(chart.Name, chartReq, ou.helmValues)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	fmt.Printf("Chart %s, %s deployed\n", chart.Name, chart.ChartPath)
 
 	return nil
 
