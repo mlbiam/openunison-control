@@ -648,12 +648,14 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
 	managementProxyUrl := ""
 	externalNaasGroupName := ""
+	sateliteManagementEnabled := false
+	mgmtProxy := make(map[string]interface{})
 
 	if naasEnabled {
 		openunison := ou.helmValues["openunison"].(map[string]interface{})
-		mgmtProxy, ok := openunison["management_proxy"].(map[string]interface{})
+		mgmtProxy, sateliteManagementEnabled = openunison["management_proxy"].(map[string]interface{})
 
-		if ok {
+		if sateliteManagementEnabled {
 			fmt.Printf("Management proxy enabled\n")
 			mgmtEnabled, ok := mgmtProxy["enabled"]
 			if ok && mgmtEnabled == true {
@@ -721,7 +723,7 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 		return err
 	}
 
-	if naasEnabled {
+	if naasEnabled && sateliteManagementEnabled {
 		// if the naas is enabled, need to deploy management
 		targetCert := ""
 
