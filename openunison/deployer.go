@@ -234,6 +234,10 @@ func (ou *OpenUnisonDeployment) DeployNaaSPortal() error {
 	}
 
 	externalEnabled := false
+	internalEnabled := false
+
+	externalSuffix := ""
+	internalSuffix := ""
 
 	naas, found := openunison["naas"].(map[string]interface{})
 	if found {
@@ -268,12 +272,6 @@ func (ou *OpenUnisonDeployment) DeployNaaSPortal() error {
 		return fmt.Errorf("no smtp section to your values.yaml")
 	}
 
-	err := ou.DeployAuthPortal()
-
-	if err != nil {
-		return err
-	}
-
 	// deploy the operator
 	settings := cli.New()
 	actionConfig := new(action.Configuration)
@@ -293,6 +291,95 @@ func (ou *OpenUnisonDeployment) DeployNaaSPortal() error {
 		if release.Name == "cluster-management" && release.Namespace == ou.namespace {
 			clusterManagementChartDeployed = true
 		}
+	}
+
+	// add standard groups to NaaS based on roles defined
+	client := action.NewInstall(actionConfig)
+
+	client.Namespace = ou.namespace
+	client.ReleaseName = "cluster-management"
+
+	cp, err := client.ChartPathOptions.LocateChart(ou.clusterManagementChart, settings)
+
+	if err != nil {
+		return err
+	}
+
+	chartReq, err := loader.Load(cp)
+
+	if err != nil {
+		return err
+	}
+
+	mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
+
+	openunisonCfg, ok := mergedValues["openunison"]
+
+	if !ok {
+		return fmt.Errorf("When configuring NaaS groups, no openunison section")
+	}
+
+	naasCfg, ok := openunisonCfg.(map[string]interface{})["naas"]
+
+	if !ok {
+		return fmt.Errorf("When configuring NaaS groups, no openunison.naas section")
+	}
+
+	groupsCfg, ok := naasCfg.(map[string]interface{})["groups"]
+	if !ok {
+		return fmt.Errorf("When configuring NaaS groups, no openunison.naas.groups section")
+	}
+
+	external, found := groupsCfg.(map[string]interface{})["external"].(map[string]interface{})
+	if found {
+		externalEnabled, found = external["enabled"].(bool)
+		if externalEnabled {
+			externalSuffix = external["suffix"].(string)
+		}
+	}
+
+	internal, found := groupsCfg.(map[string]interface{})["internal"].(map[string]interface{})
+	if found {
+		internalEnabled, found = internal["enabled"].(bool)
+		if internalEnabled {
+			internalSuffix = internal["suffix"].(string)
+		}
+	}
+
+	defaultGroups, ok := groupsCfg.(map[string]interface{})["default"]
+	if !ok {
+		return fmt.Errorf("When configuring NaaS groups, no openunison.naas.groups.default section")
+	}
+
+	naasRoles := make([]string, 0)
+
+	for _, group := range defaultGroups.([]interface{}) {
+		groupName := group.(map[string]interface{})["name"].(string)
+		naasRoles = append(naasRoles, groupName)
+	}
+
+	azRules := make([]interface{}, len(naasRoles))
+
+	for i, role := range naasRoles {
+		azRules[i] = fmt.Sprintf("k8s-namespace-%v-k8s-%v-*", role, "k8s")
+	}
+
+	if internalEnabled {
+		azRules = append(azRules, fmt.Sprintf("k8s-cluster-k8s-%v-administrators%v", "k8s", internalSuffix))
+	}
+
+	if externalEnabled {
+		azRules = append(azRules, fmt.Sprintf("k8s-cluster-k8s-%v-administrators%v", "k8s", externalSuffix))
+	}
+
+	ou.helmValues["openunison"].(map[string]interface{})["az_groups"] = azRules
+
+	// with merged values, create azRules
+
+	err = ou.DeployAuthPortal()
+
+	if err != nil {
+		return err
 	}
 
 	//if !openunisonDeployed {
@@ -1418,6 +1505,9 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 	if err != nil {
 		return err
 	}
+
+	fmt.Printf("Waiting for a few seconds for the webhooks to settle to run")
+	time.Sleep(10 * time.Second)
 
 	fmt.Println("Deploying the orchestra-login-portal chart")
 
