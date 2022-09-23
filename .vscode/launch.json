@@ -11,19 +11,23 @@
             "mode": "debug",
             "program": "${workspaceFolder}",
             "args":[
-                "install-satelite",
-                "-c",
-                "/Users/marcboorshtein/git-local/helm-charts/orchestra",
-                "-r",
-                "kiali=/Users/marcboorshtein/git-local/helm-charts/openunison-kiali",
-                "-a",
-                "/Users/marcboorshtein/git-local/helm-charts/openunison-k8s-add-cluster",
-                "/Users/marcboorshtein/Documents/Documents/customers/hsbc/v2/hsbc-satelite-1.yaml",
-                "hsbc-v2-cp",
-                "kubernetes-admin@kubernetes"
+                "install-auth-portal",
+                "-u", 
+                "hsbc-myvd=/Users/marcboorshtein/Documents/Documents/customers/hsbc/v2/helm-myvd/hsbc-myvd",
+                "--additional-helm-charts=hsbc=/Users/marcboorshtein/Documents/Documents/customers/hsbc/v2/hsbcv2/hsbc-cp", 
+                
+                "-s", 
+                "~/Documents/Documents/customers/hsbc/v3/ldapspassword",
+                "-b", 
+                "~/Documents/Documents/customers/hsbc/v3/dbpassword",
+                "-t", 
+                "~/Documents/Documents/customers/hsbc/v3/smtppassword", 
+                "-c", 
+                "/Users/marcboorshtein/git-local/helm-charts/orchestra",  
+                "~/Documents/Documents/customers/hsbc/v3/values-hsbcv3.yaml"
             ],
             "env": {
-                "KUBECONFIG": "/tmp/kube-config-hsbc-sat1"
+                "KUBECONFIG": "~/.kube/hsbc-v3.conf"
             }
         }
     ]

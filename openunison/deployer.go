@@ -23,6 +23,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/cli"
 
@@ -78,11 +79,12 @@ type OpenUnisonDeployment struct {
 	helmValues map[string]interface{}
 
 	additionalCharts []HelmChartInfo
+	preCharts        []HelmChartInfo
 }
 
 // creates a new deployment structure
-func NewOpenUnisonDeployment(namespace string, operatorImage string, operatorDeployCrd bool, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, clusterManagementChart string, pathToDbPassword string, pathToSmtpPassword string, skipClusterManagement bool, additionalCharts []HelmChartInfo) (*OpenUnisonDeployment, error) {
-	ou, err := NewSateliteDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "", "", additionalCharts)
+func NewOpenUnisonDeployment(namespace string, operatorImage string, operatorDeployCrd bool, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, clusterManagementChart string, pathToDbPassword string, pathToSmtpPassword string, skipClusterManagement bool, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo) (*OpenUnisonDeployment, error) {
+	ou, err := NewSateliteDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "", "", additionalCharts, preCharts)
 
 	if err != nil {
 		return nil, err
@@ -97,7 +99,7 @@ func NewOpenUnisonDeployment(namespace string, operatorImage string, operatorDep
 }
 
 // creates a new deployment structure
-func NewSateliteDeployment(namespace string, operatorImage string, operatorDeployCrd bool, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string, additionalCharts []HelmChartInfo) (*OpenUnisonDeployment, error) {
+func NewSateliteDeployment(namespace string, operatorImage string, operatorDeployCrd bool, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo) (*OpenUnisonDeployment, error) {
 	ou := &OpenUnisonDeployment{}
 
 	ou.namespace = namespace
@@ -118,6 +120,7 @@ func NewSateliteDeployment(namespace string, operatorImage string, operatorDeplo
 	ou.pathToSaveSateliteValues = pathToSateliteYaml
 
 	ou.additionalCharts = additionalCharts
+	ou.preCharts = preCharts
 
 	err := ou.loadKubernetesConfiguration()
 	if err != nil {
@@ -410,7 +413,8 @@ func (ou *OpenUnisonDeployment) DeployNaaSPortal() error {
 
 			mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
 
-			_, err = client.Run(chartReq, mergedValues)
+			//_, err = client.Run(chartReq, mergedValues)
+			_, err = ou.runChartInstall(client, client.ReleaseName, chartReq, mergedValues, actionConfig)
 
 			if err != nil {
 				return err
@@ -434,7 +438,8 @@ func (ou *OpenUnisonDeployment) DeployNaaSPortal() error {
 			}
 
 			mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
-			_, err = client.Run("cluster-management", chartReq, mergedValues)
+			//_, err = client.Run("cluster-management", chartReq, mergedValues)
+			_, err = ou.runChartUpgrade(client, "cluster-management", chartReq, mergedValues)
 
 			if err != nil {
 				return err
@@ -980,8 +985,8 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 			return true, err
 		}
 
-		_, err = client.Run(chartReq, cpValues)
-
+		//_, err = client.Run(chartReq, cpValues)
+		_, err = ou.runChartInstall(client, client.ReleaseName, chartReq, cpValues, actionConfig)
 		if err != nil {
 			return true, err
 		}
@@ -1003,14 +1008,53 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 			return true, err
 		}
 
-		_, err = client.Run(satelateReleaseName, chartReq, cpValues)
-
+		//_, err = client.Run(satelateReleaseName, chartReq, cpValues)
+		_, err = ou.runChartUpgrade(client, satelateReleaseName, chartReq, cpValues)
 		if err != nil {
 			return true, err
 		}
 	}
 
 	return false, nil
+}
+
+func (ou *OpenUnisonDeployment) runChartInstall(client *action.Install, name string, chartReq *chart.Chart, cpValues map[string]interface{}, actionConfig *action.Configuration) (bool, error) {
+	for i := 0; i <= 5; i++ {
+		_, err := client.Run(chartReq, cpValues)
+		if err != nil {
+			fmt.Printf("Error installing chart %s - %s, deleting and retrying\n", name, err.Error())
+
+			del := action.NewUninstall(actionConfig)
+			_, err := del.Run(name)
+			if err != nil {
+				return true, err
+			}
+			fmt.Println("Waiting a few seconds...")
+			time.Sleep(5 * time.Second)
+			fmt.Printf("Try #%i\n", i)
+		} else {
+			return false, nil
+		}
+	}
+
+	return true, fmt.Errorf("Failed to install chart %s after five tries", name)
+}
+
+func (ou *OpenUnisonDeployment) runChartUpgrade(client *action.Upgrade, name string, chartReq *chart.Chart, cpValues map[string]interface{}) (bool, error) {
+	for i := 0; i <= 5; i++ {
+		_, err := client.Run(name, chartReq, cpValues)
+		if err != nil {
+			fmt.Printf("Error installing chart %s - %s, retrying\n", name, err.Error())
+
+			fmt.Println("Waiting a few seconds...")
+			time.Sleep(5 * time.Second)
+			fmt.Printf("Try #%i\n", i)
+		} else {
+			return false, nil
+		}
+	}
+
+	return true, fmt.Errorf("Failed to install chart %s after five tries", name)
 }
 
 // set the secret
@@ -1159,7 +1203,20 @@ func (ou *OpenUnisonDeployment) setupSecret(helmValues map[string]interface{}) e
 
 // deploys all extra charts
 func (ou *OpenUnisonDeployment) DeployAdditionalCharts() error {
+	fmt.Printf("Deploying additional charts: %d\n", len(ou.additionalCharts))
 	for _, chart := range ou.additionalCharts {
+		err := ou.deployChart(chart)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// deploys all extra charts
+func (ou *OpenUnisonDeployment) DeployPreCharts() error {
+	for _, chart := range ou.preCharts {
 		err := ou.deployChart(chart)
 		if err != nil {
 			return err
@@ -1217,7 +1274,8 @@ func (ou *OpenUnisonDeployment) deployChart(chart HelmChartInfo) error {
 			return err
 		}
 
-		_, err = client.Run(chartReq, ou.helmValues)
+		//_, err = client.Run(chartReq, ou.helmValues)
+		_, err = ou.runChartInstall(client, client.ReleaseName, chartReq, ou.helmValues, actionConfig)
 
 		if err != nil {
 			return err
@@ -1241,7 +1299,9 @@ func (ou *OpenUnisonDeployment) deployChart(chart HelmChartInfo) error {
 			return err
 		}
 
-		_, err = client.Run(chart.Name, chartReq, ou.helmValues)
+		//_, err = client.Run(chart.Name, chartReq, ou.helmValues)
+
+		_, err = ou.runChartUpgrade(client, chart.Name, chartReq, ou.helmValues)
 
 		if err != nil {
 			return err
@@ -1288,6 +1348,13 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 	}
 
 	err := ou.setupSecret(ou.helmValues)
+
+	if err != nil {
+		return err
+	}
+
+	// run pre-charts
+	err = ou.DeployPreCharts()
 
 	if err != nil {
 		return err
@@ -1349,11 +1416,14 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 
 		// define values
 		vals := map[string]interface{}{
-			"image":      ou.operator.image,
-			"crd.deploy": ou.operator.deployCrd,
+			"image": ou.operator.image,
+			"crd": map[string]interface{}{
+				"deploy": ou.operator.deployCrd,
+			},
 		}
 
-		_, err = client.Run(chartReq, vals)
+		//_, err = client.Run(chartReq, vals)
+		_, err = ou.runChartInstall(client, client.ReleaseName, chartReq, vals, actionConfig)
 
 		if err != nil {
 			return err
@@ -1378,11 +1448,15 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 
 		// define values
 		vals := map[string]interface{}{
-			"image":      ou.operator.image,
-			"crd.deploy": ou.operator.deployCrd,
+			"image": ou.operator.image,
+			"crd": map[string]interface{}{
+				"deploy": ou.operator.deployCrd,
+			},
 		}
 
-		_, err = client.Run("openunison", chartReq, vals)
+		//_, err = client.Run("openunison", chartReq, vals)
+
+		_, err = ou.runChartUpgrade(client, "openunison", chartReq, vals)
 
 		if err != nil {
 			return err
@@ -1440,7 +1514,8 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 
 		mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
 
-		_, deployErr = client.Run(chartReq, mergedValues)
+		//_, deployErr = client.Run(chartReq, mergedValues)
+		_, deployErr = ou.runChartInstall(client, client.ReleaseName, chartReq, mergedValues, actionConfig)
 
 	} else {
 		// deploy orchestra, make sure that it deploys
@@ -1465,7 +1540,8 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 
 		mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
 
-		_, deployErr = client.Run("orchestra", chartReq, mergedValues)
+		//_, deployErr = client.Run("orchestra", chartReq, mergedValues)
+		_, deployErr = ou.runChartUpgrade(client, "orchestra", chartReq, mergedValues)
 	}
 
 	if deployErr != nil {
@@ -1535,7 +1611,8 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 
 		mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
 
-		_, err = client.Run(chartReq, mergedValues)
+		//_, err = client.Run(chartReq, mergedValues)
+		_, err = ou.runChartInstall(client, client.ReleaseName, chartReq, mergedValues, actionConfig)
 
 		if err != nil {
 			return err
@@ -1574,7 +1651,8 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 
 		mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
 
-		_, err = client.Run("orchestra-login-portal", chartReq, mergedValues)
+		//_, err = client.Run("orchestra-login-portal", chartReq, mergedValues)
+		_, err = ou.runChartUpgrade(client, "orchestra-login-portal", chartReq, mergedValues)
 
 		if err != nil {
 			return err
