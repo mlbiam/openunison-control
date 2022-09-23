@@ -1,6 +1,5 @@
 /*
 Copyright © 2022 NAME HERE <EMAIL ADDRESS>
-
 */
 package cmd
 
@@ -33,7 +32,7 @@ var installSateliteCmd = &cobra.Command{
 		controlPlaneCtxName := args[1]
 		sateliteCtxName := args[2]
 
-		openunisonDeployment, err := openunison.NewSateliteDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, controlPlaneCtxName, sateliteCtxName, addClusterChart, pathToSateliteYaml, parseChartSlices(additionalCharts))
+		openunisonDeployment, err := openunison.NewSateliteDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, controlPlaneCtxName, sateliteCtxName, addClusterChart, pathToSateliteYaml, parseChartSlices(&additionalCharts), parseChartSlices(&preCharts))
 
 		if err != nil {
 			panic(err)
@@ -59,5 +58,9 @@ func init() {
 
 	installSateliteCmd.PersistentFlags().StringVarP(&pathToSateliteYaml, "save-satelite-values-path", "s", "", "If specified, the values generated for the satelite integration on the control plane are saved to this path")
 
-	additionalCharts = installSateliteCmd.PersistentFlags().StringSliceP("additional-helm-charts", "r", []string{}, "Comma seperated list of chart=path to deploy additional charts after OpenUnison is deployed")
+	preCharts = make([]string, 0)
+	additionalCharts = make([]string, 0)
+
+	installAuthPortalCmd.PersistentFlags().StringSliceVarP(&preCharts, "prerun-helm-charts", "u", []string{}, "Comma seperated list of chart=path to deploy charts before OpenUnison is deployed")
+	installSateliteCmd.PersistentFlags().StringSliceVarP(&additionalCharts, "additional-helm-charts", "r", []string{}, "Comma seperated list of chart=path to deploy additional charts after OpenUnison is deployed")
 }

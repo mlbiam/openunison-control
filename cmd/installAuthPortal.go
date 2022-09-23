@@ -1,6 +1,5 @@
 /*
 Copyright © 2022 NAME HERE <EMAIL ADDRESS>
-
 */
 package cmd
 
@@ -29,7 +28,7 @@ var installAuthPortalCmd = &cobra.Command{
 
 		pathToValuesYaml = args[0]
 
-		openunisonDeployment, err := openunison.NewOpenUnisonDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, clusterManagementChart, pathToDbPassword, pathToSmtpPassword, skipClusterManagement, parseChartSlices(additionalCharts))
+		openunisonDeployment, err := openunison.NewOpenUnisonDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, clusterManagementChart, pathToDbPassword, pathToSmtpPassword, skipClusterManagement, parseChartSlices(&additionalCharts), parseChartSlices(&preCharts))
 
 		if err != nil {
 			panic(err)
@@ -83,7 +82,11 @@ func init() {
 
 	installAuthPortalCmd.PersistentFlags().BoolVarP(&skipClusterManagement, "skip-cluster-management", "k", false, "Set to true if skipping the clister management chart when openunison.enable_provisioning is true")
 
-	additionalCharts = installAuthPortalCmd.PersistentFlags().StringSliceP("additional-helm-charts", "r", []string{}, "Comma seperated list of chart=path to deploy additional charts after OpenUnison is deployed")
+	preCharts = make([]string, 0)
+	additionalCharts = make([]string, 0)
+
+	installAuthPortalCmd.PersistentFlags().StringSliceVarP(&preCharts, "prerun-helm-charts", "u", []string{}, "Comma seperated list of chart=path to deploy charts before OpenUnison is deployed")
+	installAuthPortalCmd.PersistentFlags().StringSliceVarP(&additionalCharts, "additional-helm-charts", "r", []string{}, "Comma seperated list of chart=path to deploy additional charts after OpenUnison is deployed")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
