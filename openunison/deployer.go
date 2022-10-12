@@ -42,9 +42,7 @@ func randSeq(n int) string {
 }
 
 type OperatorDeployment struct {
-	image     string
-	deployCrd bool
-	chart     string
+	chart string
 }
 
 // for sting info about additional helm charts
@@ -83,8 +81,8 @@ type OpenUnisonDeployment struct {
 }
 
 // creates a new deployment structure
-func NewOpenUnisonDeployment(namespace string, operatorImage string, operatorDeployCrd bool, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, clusterManagementChart string, pathToDbPassword string, pathToSmtpPassword string, skipClusterManagement bool, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo) (*OpenUnisonDeployment, error) {
-	ou, err := NewSateliteDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "", "", additionalCharts, preCharts)
+func NewOpenUnisonDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, clusterManagementChart string, pathToDbPassword string, pathToSmtpPassword string, skipClusterManagement bool, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo) (*OpenUnisonDeployment, error) {
+	ou, err := NewSateliteDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "", "", additionalCharts, preCharts)
 
 	if err != nil {
 		return nil, err
@@ -99,13 +97,11 @@ func NewOpenUnisonDeployment(namespace string, operatorImage string, operatorDep
 }
 
 // creates a new deployment structure
-func NewSateliteDeployment(namespace string, operatorImage string, operatorDeployCrd bool, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo) (*OpenUnisonDeployment, error) {
+func NewSateliteDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo) (*OpenUnisonDeployment, error) {
 	ou := &OpenUnisonDeployment{}
 
 	ou.namespace = namespace
 
-	ou.operator.image = operatorImage
-	ou.operator.deployCrd = operatorDeployCrd
 	ou.operator.chart = operatorChart
 
 	ou.orchestraChart = orchestraChart
@@ -1414,16 +1410,8 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 			return err
 		}
 
-		// define values
-		vals := map[string]interface{}{
-			"image": ou.operator.image,
-			"crd": map[string]interface{}{
-				"deploy": ou.operator.deployCrd,
-			},
-		}
-
 		//_, err = client.Run(chartReq, vals)
-		_, err = ou.runChartInstall(client, client.ReleaseName, chartReq, vals, actionConfig)
+		_, err = ou.runChartInstall(client, client.ReleaseName, chartReq, ou.helmValues, actionConfig)
 
 		if err != nil {
 			return err
@@ -1446,17 +1434,9 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 			return err
 		}
 
-		// define values
-		vals := map[string]interface{}{
-			"image": ou.operator.image,
-			"crd": map[string]interface{}{
-				"deploy": ou.operator.deployCrd,
-			},
-		}
-
 		//_, err = client.Run("openunison", chartReq, vals)
 
-		_, err = ou.runChartUpgrade(client, "openunison", chartReq, vals)
+		_, err = ou.runChartUpgrade(client, "openunison", chartReq, ou.helmValues)
 
 		if err != nil {
 			return err

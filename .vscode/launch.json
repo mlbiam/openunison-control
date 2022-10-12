@@ -17,17 +17,19 @@
                 "--additional-helm-charts=hsbc=/Users/marcboorshtein/Documents/Documents/customers/hsbc/v2/hsbcv2/hsbc-cp", 
                 
                 "-s", 
-                "~/Documents/Documents/customers/hsbc/v3/ldapspassword",
+                "/Users/marcboorshtein/Documents/Documents/customers/hsbc/v3/ldapspassword",
                 "-b", 
-                "~/Documents/Documents/customers/hsbc/v3/dbpassword",
+                "/Users/marcboorshtein/Documents/Documents/customers/hsbc/v3/dbpassword",
                 "-t", 
-                "~/Documents/Documents/customers/hsbc/v3/smtppassword", 
+                "/Users/marcboorshtein/Documents/Documents/customers/hsbc/v3/smtppassword", 
+                "-o",
+                "/Users/marcboorshtein/git-local/helm-charts/openunison-operator",
                 "-c", 
                 "/Users/marcboorshtein/git-local/helm-charts/orchestra",  
-                "~/Documents/Documents/customers/hsbc/v3/values-hsbcv3.yaml"
+                "/Users/marcboorshtein/Documents/Documents/customers/hsbc/v3/values-hsbcv3.yaml"
             ],
             "env": {
-                "KUBECONFIG": "~/.kube/hsbc-v3.conf"
+                "KUBECONFIG": "/Users/marcboorshtein/.kube/hsbc-v3.conf"
             }
         }
     ]
