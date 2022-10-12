@@ -32,7 +32,7 @@ var installSateliteCmd = &cobra.Command{
 		controlPlaneCtxName := args[1]
 		sateliteCtxName := args[2]
 
-		openunisonDeployment, err := openunison.NewSateliteDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, controlPlaneCtxName, sateliteCtxName, addClusterChart, pathToSateliteYaml, parseChartSlices(&additionalCharts), parseChartSlices(&preCharts))
+		openunisonDeployment, err := openunison.NewSateliteDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, controlPlaneCtxName, sateliteCtxName, addClusterChart, pathToSateliteYaml, parseChartSlices(&additionalCharts), parseChartSlices(&preCharts))
 
 		if err != nil {
 			panic(err)
@@ -48,8 +48,6 @@ var installSateliteCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(installSateliteCmd)
 
-	installSateliteCmd.PersistentFlags().StringVarP(&operatorImage, "operator-image", "p", "docker.io/tremolosecurity/openunison-k8s-operator:latest", "Operator image name")
-	installSateliteCmd.PersistentFlags().BoolVarP(&operatorDeployCrd, "operator-deploy-crds", "d", true, "Deploy CRDs with the operator")
 	installSateliteCmd.PersistentFlags().StringVarP(&operatorChart, "operator-chart", "o", "tremolo/openunison-operator", "Helm chart for OpenUnison's operator")
 
 	installSateliteCmd.PersistentFlags().StringVarP(&orchestraChart, "orchestra-chart", "c", "tremolo/orchestra", "Helm chart of the orchestra portal")

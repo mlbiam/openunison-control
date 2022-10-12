@@ -28,7 +28,7 @@ var installAuthPortalCmd = &cobra.Command{
 
 		pathToValuesYaml = args[0]
 
-		openunisonDeployment, err := openunison.NewOpenUnisonDeployment(namespace, operatorImage, operatorDeployCrd, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, clusterManagementChart, pathToDbPassword, pathToSmtpPassword, skipClusterManagement, parseChartSlices(&additionalCharts), parseChartSlices(&preCharts))
+		openunisonDeployment, err := openunison.NewOpenUnisonDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, clusterManagementChart, pathToDbPassword, pathToSmtpPassword, skipClusterManagement, parseChartSlices(&additionalCharts), parseChartSlices(&preCharts))
 
 		if err != nil {
 			panic(err)
@@ -68,8 +68,6 @@ func init() {
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
 
-	installAuthPortalCmd.PersistentFlags().StringVarP(&operatorImage, "operator-image", "p", "docker.io/tremolosecurity/openunison-k8s-operator:latest", "Operator image name")
-	installAuthPortalCmd.PersistentFlags().BoolVarP(&operatorDeployCrd, "operator-deploy-crds", "d", true, "Deploy CRDs with the operator")
 	installAuthPortalCmd.PersistentFlags().StringVarP(&operatorChart, "operator-chart", "o", "tremolo/openunison-operator", "Helm chart for OpenUnison's operator")
 
 	installAuthPortalCmd.PersistentFlags().StringVarP(&orchestraChart, "orchestra-chart", "c", "tremolo/orchestra", "Helm chart of the orchestra portal")
