@@ -48,17 +48,17 @@ var installSateliteCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(installSateliteCmd)
 
-	installSateliteCmd.PersistentFlags().StringVarP(&operatorChart, "operator-chart", "o", "tremolo/openunison-operator", "Helm chart for OpenUnison's operator")
+	installSateliteCmd.PersistentFlags().StringVarP(&operatorChart, "operator-chart", "o", "tremolo/openunison-operator", "Helm chart for OpenUnison's operator, adding '@version' installs the specific version")
 
-	installSateliteCmd.PersistentFlags().StringVarP(&orchestraChart, "orchestra-chart", "c", "tremolo/orchestra", "Helm chart of the orchestra portal")
-	installSateliteCmd.PersistentFlags().StringVarP(&orchestraLoginPortalChart, "orchestra-login-portal-chart", "l", "tremolo/orchestra-login-portal", "Helm chart for the orchestra login portal")
-	installSateliteCmd.PersistentFlags().StringVarP(&addClusterChart, "add-cluster-chart", "a", "tremolo/openunison-k8s-add-cluster", "Helm chart fir adding a cluster to OpenUnison")
+	installSateliteCmd.PersistentFlags().StringVarP(&orchestraChart, "orchestra-chart", "c", "tremolo/orchestra", "Helm chart of the orchestra portal, adding '@version' installs the specific version")
+	installSateliteCmd.PersistentFlags().StringVarP(&orchestraLoginPortalChart, "orchestra-login-portal-chart", "l", "tremolo/orchestra-login-portal", "Helm chart for the orchestra login portal, adding '@version' installs the specific version")
+	installSateliteCmd.PersistentFlags().StringVarP(&addClusterChart, "add-cluster-chart", "a", "tremolo/openunison-k8s-add-cluster", "Helm chart for adding a cluster to OpenUnison, adding '@version' installs the specific version")
 
 	installSateliteCmd.PersistentFlags().StringVarP(&pathToSateliteYaml, "save-satelite-values-path", "s", "", "If specified, the values generated for the satelite integration on the control plane are saved to this path")
 
 	preCharts = make([]string, 0)
 	additionalCharts = make([]string, 0)
 
-	installSateliteCmd.PersistentFlags().StringSliceVarP(&preCharts, "prerun-helm-charts", "u", []string{}, "Comma seperated list of chart=path to deploy charts before OpenUnison is deployed")
-	installSateliteCmd.PersistentFlags().StringSliceVarP(&additionalCharts, "additional-helm-charts", "r", []string{}, "Comma seperated list of chart=path to deploy additional charts after OpenUnison is deployed")
+	installSateliteCmd.PersistentFlags().StringSliceVarP(&preCharts, "prerun-helm-charts", "u", []string{}, "Comma seperated list of chart=path to deploy charts before OpenUnison is deployed, adding '@version' installs the specific version")
+	installSateliteCmd.PersistentFlags().StringSliceVarP(&additionalCharts, "additional-helm-charts", "r", []string{}, "Comma seperated list of chart=path to deploy additional charts after OpenUnison is deployed, adding '@version' installs the specific version")
 }

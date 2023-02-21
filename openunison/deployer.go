@@ -298,13 +298,7 @@ func (ou *OpenUnisonDeployment) DeployNaaSPortal() error {
 	client.Namespace = ou.namespace
 	client.ReleaseName = "cluster-management"
 
-	cp, err := client.ChartPathOptions.LocateChart(ou.clusterManagementChart, settings)
-
-	if err != nil {
-		return err
-	}
-
-	chartReq, err := loader.Load(cp)
+	chartReq, err := ou.locateChart(ou.clusterManagementChart, &client.ChartPathOptions, settings)
 
 	if err != nil {
 		return err
@@ -395,14 +389,7 @@ func (ou *OpenUnisonDeployment) DeployNaaSPortal() error {
 			client.Namespace = ou.namespace
 			client.ReleaseName = "cluster-management"
 
-			cp, err := client.ChartPathOptions.LocateChart(ou.clusterManagementChart, settings)
-
-			if err != nil {
-				return err
-			}
-
-			chartReq, err := loader.Load(cp)
-
+			chartReq, err := ou.locateChart(ou.clusterManagementChart, &client.ChartPathOptions, settings)
 			if err != nil {
 				return err
 			}
@@ -421,13 +408,7 @@ func (ou *OpenUnisonDeployment) DeployNaaSPortal() error {
 
 			client.Namespace = ou.namespace
 
-			cp, err := client.ChartPathOptions.LocateChart(ou.clusterManagementChart, settings)
-
-			if err != nil {
-				return err
-			}
-
-			chartReq, err := loader.Load(cp)
+			chartReq, err := ou.locateChart(ou.clusterManagementChart, &client.ChartPathOptions, settings)
 
 			if err != nil {
 				return err
@@ -969,13 +950,7 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 		client.Namespace = ou.namespace
 		client.ReleaseName = satelateReleaseName
 
-		cp, err := client.ChartPathOptions.LocateChart(ou.addClusterChart, settings)
-
-		if err != nil {
-			return true, err
-		}
-
-		chartReq, err := loader.Load(cp)
+		chartReq, err := ou.locateChart(ou.addClusterChart, &client.ChartPathOptions, settings)
 
 		if err != nil {
 			return true, err
@@ -992,13 +967,7 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 
 		client.Namespace = ou.namespace
 
-		cp, err := client.ChartPathOptions.LocateChart(ou.addClusterChart, settings)
-
-		if err != nil {
-			return true, err
-		}
-
-		chartReq, err := loader.Load(cp)
+		chartReq, err := ou.locateChart(ou.addClusterChart, &client.ChartPathOptions, settings)
 
 		if err != nil {
 			return true, err
@@ -1258,13 +1227,7 @@ func (ou *OpenUnisonDeployment) deployChart(chart HelmChartInfo) error {
 		client.Namespace = ou.namespace
 		client.ReleaseName = chart.Name
 
-		cp, err := client.ChartPathOptions.LocateChart(chart.ChartPath, settings)
-
-		if err != nil {
-			return err
-		}
-
-		chartReq, err := loader.Load(cp)
+		chartReq, err := ou.locateChart(chart.ChartPath, &client.ChartPathOptions, settings)
 
 		if err != nil {
 			return err
@@ -1283,13 +1246,7 @@ func (ou *OpenUnisonDeployment) deployChart(chart HelmChartInfo) error {
 
 		client.Namespace = ou.namespace
 
-		cp, err := client.ChartPathOptions.LocateChart(chart.ChartPath, settings)
-
-		if err != nil {
-			return err
-		}
-
-		chartReq, err := loader.Load(cp)
+		chartReq, err := ou.locateChart(chart.ChartPath, &client.ChartPathOptions, settings)
 
 		if err != nil {
 			return err
@@ -1307,6 +1264,39 @@ func (ou *OpenUnisonDeployment) deployChart(chart HelmChartInfo) error {
 	fmt.Printf("Chart %s, %s deployed\n", chart.Name, chart.ChartPath)
 
 	return nil
+
+}
+
+// specifies chart version
+
+func (ou *OpenUnisonDeployment) locateChart(configChartName string, chartPathOptions *action.ChartPathOptions, settings *cli.EnvSettings) (*chart.Chart, error) {
+	chartName := configChartName
+	chartVersion := ""
+	if strings.Contains(configChartName, "@") {
+		chartName = ou.operator.chart[0:strings.Index(ou.operator.chart, "@")]
+		chartVersion = ou.operator.chart[strings.Index(ou.operator.chart, "@")+1:]
+
+		fmt.Printf("Chart version specified for %s: %s\n", chartName, chartVersion)
+
+		chartPathOptions.Version = chartVersion
+
+	} else {
+		fmt.Printf("No chart version specified for %s\n", chartName)
+	}
+
+	cp, err := chartPathOptions.LocateChart(chartName, settings)
+
+	if err != nil {
+		return nil, err
+	}
+
+	chartReq, err := loader.Load(cp)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return chartReq, nil
 
 }
 
@@ -1398,13 +1388,7 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 		client.Namespace = ou.namespace
 		client.ReleaseName = "openunison"
 
-		cp, err := client.ChartPathOptions.LocateChart(ou.operator.chart, settings)
-
-		if err != nil {
-			return err
-		}
-
-		chartReq, err := loader.Load(cp)
+		chartReq, err := ou.locateChart(ou.operator.chart, &client.ChartPathOptions, settings)
 
 		if err != nil {
 			return err
@@ -1422,19 +1406,11 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 
 		client.Namespace = ou.namespace
 
-		cp, err := client.ChartPathOptions.LocateChart(ou.operator.chart, settings)
+		chartReq, err := ou.locateChart(ou.operator.chart, &client.ChartPathOptions, settings)
 
 		if err != nil {
 			return err
 		}
-
-		chartReq, err := loader.Load(cp)
-
-		if err != nil {
-			return err
-		}
-
-		//_, err = client.Run("openunison", chartReq, vals)
 
 		_, err = ou.runChartUpgrade(client, "openunison", chartReq, ou.helmValues)
 
@@ -1480,13 +1456,7 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 		client.Namespace = ou.namespace
 		client.ReleaseName = "orchestra"
 
-		cp, err := client.ChartPathOptions.LocateChart(ou.orchestraChart, settings)
-
-		if err != nil {
-			return err
-		}
-
-		chartReq, err := loader.Load(cp)
+		chartReq, err := ou.locateChart(ou.orchestraChart, &client.ChartPathOptions, settings)
 
 		if err != nil {
 			return err
@@ -1506,13 +1476,7 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 
 		client.Namespace = ou.namespace
 
-		cp, err := client.ChartPathOptions.LocateChart(ou.orchestraChart, settings)
-
-		if err != nil {
-			return err
-		}
-
-		chartReq, err := loader.Load(cp)
+		chartReq, err := ou.locateChart(ou.orchestraChart, &client.ChartPathOptions, settings)
 
 		if err != nil {
 			return err
@@ -1577,13 +1541,7 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 		client.Namespace = ou.namespace
 		client.ReleaseName = "orchestra-login-portal"
 
-		cp, err := client.ChartPathOptions.LocateChart(ou.orchestraLoginPortalChart, settings)
-
-		if err != nil {
-			return err
-		}
-
-		chartReq, err := loader.Load(cp)
+		chartReq, err := ou.locateChart(ou.orchestraLoginPortalChart, &client.ChartPathOptions, settings)
 
 		if err != nil {
 			return err
@@ -1617,13 +1575,7 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 
 		client.Namespace = ou.namespace
 
-		cp, err := client.ChartPathOptions.LocateChart(ou.orchestraLoginPortalChart, settings)
-
-		if err != nil {
-			return err
-		}
-
-		chartReq, err := loader.Load(cp)
+		chartReq, err := ou.locateChart(ou.orchestraLoginPortalChart, &client.ChartPathOptions, settings)
 
 		if err != nil {
 			return err
