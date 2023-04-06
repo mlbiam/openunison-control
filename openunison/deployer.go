@@ -853,6 +853,7 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 		  "name": "%v",
 		  "label": "%v",
 		  "description": "Cluster %v",
+		  "parent": "%v",
 		  "sso": {
 			"enabled": true,
 			"inactivityTimeoutSeconds": 900
@@ -868,12 +869,29 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 		}
 	  }`
 
+	parentOrg := ""
+
+	openunison := helmValues["openunison"].(map[string]interface{})
+
+	if openunison != nil {
+
+		if openunison["control_plane"] != nil {
+			controlPlane := openunison["control_plane"].(map[string]interface{})
+			parentOrg = controlPlane["parent"].(string)
+		}
+	}
+
+	if parentOrg == "" {
+		parentOrg = "B158BD40-0C1B-11E3-8FFD-0800200C9A66"
+	}
+
 	sateliteNetwork := helmValues["network"].(map[string]interface{})
 
 	cpYaml = fmt.Sprintf(cpYaml,
 		clusterName,
 		clusterName,
 		clusterName,
+		parentOrg,
 		sateliteNetwork["openunison_host"].(string),
 		sateliteNetwork["dashboard_host"].(string))
 
@@ -906,8 +924,6 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 
 		cpValues["cluster"].(map[string]interface{})["az_groups"] = cpAzGroups
 	}
-
-	openunison := helmValues["openunison"].(map[string]interface{})
 
 	if openunison != nil {
 
