@@ -68,13 +68,13 @@ func init() {
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
 
-	installAuthPortalCmd.PersistentFlags().StringVarP(&operatorChart, "operator-chart", "o", "tremolo/openunison-operator", "Helm chart for OpenUnison's operator")
+	installAuthPortalCmd.PersistentFlags().StringVarP(&operatorChart, "operator-chart", "o", "tremolo/openunison-operator", "Helm chart for OpenUnison's operator, adding '@version' installs the specific version")
 
-	installAuthPortalCmd.PersistentFlags().StringVarP(&orchestraChart, "orchestra-chart", "c", "tremolo/orchestra", "Helm chart of the orchestra portal")
-	installAuthPortalCmd.PersistentFlags().StringVarP(&orchestraLoginPortalChart, "orchestra-login-portal-chart", "l", "tremolo/orchestra-login-portal", "Helm chart for the orchestra login portal")
+	installAuthPortalCmd.PersistentFlags().StringVarP(&orchestraChart, "orchestra-chart", "c", "tremolo/orchestra", "Helm chart of the orchestra portal, adding '@version' installs the specific version")
+	installAuthPortalCmd.PersistentFlags().StringVarP(&orchestraLoginPortalChart, "orchestra-login-portal-chart", "l", "tremolo/orchestra-login-portal", "Helm chart for the orchestra login portal, adding '@version' installs the specific version")
 	installAuthPortalCmd.PersistentFlags().StringVarP(&secretFile, "secrets-file-path", "s", "", "Path to file containing the authentication secret")
 
-	installAuthPortalCmd.PersistentFlags().StringVarP(&clusterManagementChart, "cluster-management-chart", "m", "tremolo/openunison-k8s-cluster-management", "Helm chart for enabling cluster management")
+	installAuthPortalCmd.PersistentFlags().StringVarP(&clusterManagementChart, "cluster-management-chart", "m", "tremolo/openunison-k8s-cluster-management", "Helm chart for enabling cluster management, adding '@version' installs the specific version")
 	installAuthPortalCmd.PersistentFlags().StringVarP(&pathToDbPassword, "database-secret-path", "b", "", "Path to file containing the database password")
 	installAuthPortalCmd.PersistentFlags().StringVarP(&pathToSmtpPassword, "smtp-secret-path", "t", "", "Path to file containing the smtp password")
 
@@ -83,8 +83,8 @@ func init() {
 	preCharts = make([]string, 0)
 	additionalCharts = make([]string, 0)
 
-	installAuthPortalCmd.PersistentFlags().StringSliceVarP(&preCharts, "prerun-helm-charts", "u", []string{}, "Comma seperated list of chart=path to deploy charts before OpenUnison is deployed")
-	installAuthPortalCmd.PersistentFlags().StringSliceVarP(&additionalCharts, "additional-helm-charts", "r", []string{}, "Comma seperated list of chart=path to deploy additional charts after OpenUnison is deployed")
+	installAuthPortalCmd.PersistentFlags().StringSliceVarP(&preCharts, "prerun-helm-charts", "u", []string{}, "Comma seperated list of chart=path to deploy charts before OpenUnison is deployed, adding '@version' installs the specific version")
+	installAuthPortalCmd.PersistentFlags().StringSliceVarP(&additionalCharts, "additional-helm-charts", "r", []string{}, "Comma seperated list of chart=path to deploy additional charts after OpenUnison is deployed, adding '@version' installs the specific version")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export VERSION="0.0.8"
+export VERSION="0.0.10"
 
 rm -rf target
 mkdir -p target
@@ -51,7 +51,7 @@ export MACOS_SHA256=$(shasum -a 256 ./target/ouctl-$VERSION-macos.zip | awk '{pr
 export LINUX_SHA256=$(shasum -a 256 ./target/ouctl-$VERSION-linux.zip | awk '{print $1}')
 export WIN_SHA256=$(shasum -a 256 ./target/ouctl-$VERSION-win.zip | awk '{print $1}')
 
-cat ouctl.yaml | sed "s/_VERSION_/$VERSION/g" | sed "s/_MAC_SHA_/$MACOS_SHA256/g" | sed "s/_LINUX_SHA_/$LINUX_SHA256/g" | sed "s/_WIN_SHA_/$WIN_SHA256/g" > target/ouctl.yaml
+cat ouctl.yaml | sed "s/_VERSION_/$VERSION/g" | sed "s/_MAC_SHA_/$MACOS_SHA256/g" | sed "s/_LINUX_SHA_/$LINUX_SHA256/g" | sed "s/_WIN_SHA_/$WIN_SHA256/g" | sed "s/_REPO_/$1/g" > target/ouctl.yaml
 
 aws s3 sync ./target/ s3://tremolosecurity-maven/repository/$1/
 
