@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tremolosecurity/openunison-control/helmmodel"
+	"github.com/tremolosecurity/openunison-control/openunisonmodel"
 	"gopkg.in/yaml.v3"
 
 	v1 "k8s.io/api/core/v1"
@@ -528,12 +530,15 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 	orchestra := make(map[string]interface{})
 	json.Unmarshal(respBytes, &orchestra)
 
-	spec = orchestra["spec"].(map[string]interface{})
-	hosts := spec["hosts"].([]interface{})
-	host := hosts[0].(map[string]interface{})
-	names := host["names"].([]interface{})
+	var orchestraObj openunisonmodel.OpenUnison
+	json.Unmarshal(respBytes, &orchestraObj)
 
-	nonSecretData := spec["non_secret_data"].([]interface{})
+	specObj := orchestraObj.Spec
+	hosts := specObj.Hosts
+	host := hosts[0]
+	names := host.Names
+
+	nonSecretData := specObj.NonSecretData
 
 	naasEnabled := false
 	naasGroupsInternal := false
@@ -545,21 +550,21 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 	naasRoles := make([]map[string]interface{}, 0)
 
 	for _, nsd := range nonSecretData {
-		nonSecret := nsd.(map[string]interface{})
-		nsdName := nonSecret["name"].(string)
+
+		nsdName := nsd.Name
 
 		if nsdName == "OPENUNISON_PROVISIONING_ENABLED" {
-			naasEnabled = nonSecret["value"].(string) == "true"
+			naasEnabled = nsd.Value == "true"
 		} else if nsdName == "openunison.naas.external" {
-			naasGroupsExternal = nonSecret["value"].(string) == "true"
+			naasGroupsExternal = nsd.Value == "true"
 		} else if nsdName == "openunison.naas.internal" {
-			naasGroupsInternal = nonSecret["value"].(string) == "true"
+			naasGroupsInternal = nsd.Value == "true"
 		} else if nsdName == "openunison.naas.external-suffix" {
-			naasExternalSuffix = nonSecret["value"].(string)
+			naasExternalSuffix = nsd.Value
 		} else if nsdName == "openunison.naas.internal-suffix" {
-			naasInternalSuffix = nonSecret["value"].(string)
+			naasInternalSuffix = nsd.Value
 		} else if nsdName == "openunison.naas.default-groups" {
-			enc, err := base64.StdEncoding.DecodeString(nonSecret["value"].(string))
+			enc, err := base64.StdEncoding.DecodeString(nsd.Value)
 			if err != nil {
 				return err
 			}
@@ -575,7 +580,7 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 			naasRoles = append(naasRoles, localRoles...)
 
 		} else if nsdName == "openunison.naas.roles" {
-			enc, err := base64.StdEncoding.DecodeString(nonSecret["value"].(string))
+			enc, err := base64.StdEncoding.DecodeString(nsd.Value)
 			if err != nil {
 				return err
 			}
@@ -596,10 +601,10 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
 	idpHostName := ""
 
-	for _, n := range names {
-		name := n.(map[string]interface{})
-		if name["env_var"].(string) == "OU_HOST" {
-			idpHostName = name["name"].(string)
+	for _, name := range names {
+
+		if name.EnvVar == "OU_HOST" {
+			idpHostName = name.Name
 		}
 	}
 
@@ -609,15 +614,15 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
 	fmt.Printf("Control Plane IdP host name: %v\n", idpHostName)
 
-	keyStore := spec["key_store"].(map[string]interface{})
-	keyPairs := keyStore["key_pairs"].(map[string]interface{})
-	keys := keyPairs["keys"].([]interface{})
+	keyStore := specObj.KeyStore
+	keyPairs := keyStore.KeyPairs
+	keys := keyPairs.Keys
 
 	isLocalGeneratedCert := false
 
-	for _, k := range keys {
-		key := k.(map[string]interface{})
-		if key["name"].(string) == "unison-ca" {
+	for _, key := range keys {
+
+		if key.Name == "unison-ca" {
 			isLocalGeneratedCert = true
 		}
 	}
@@ -635,20 +640,20 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
 		idpCert = string(ouTlsKey.Data["tls.crt"])
 	} else {
-		trustedCerts, ok := keyStore["trusted_certificates"].([]interface{})
-		if ok {
-			for _, c := range trustedCerts {
-				cert := c.(map[string]interface{})
-				if cert["name"] == "unison-ca" {
-					bytes, err := base64.StdEncoding.DecodeString(cert["pem_data"].(string))
-					if err != nil {
-						return err
-					}
+		trustedCerts := keyStore.TrustedCertificates
 
-					idpCert = string(bytes)
+		for _, cert := range trustedCerts {
+
+			if cert.Name == "unison-ca" {
+				bytes, err := base64.StdEncoding.DecodeString(cert.PemData)
+				if err != nil {
+					return err
 				}
+
+				idpCert = string(bytes)
 			}
 		}
+
 	}
 
 	fmt.Printf("IdP Certificate : %v\n", idpCert)
@@ -681,36 +686,55 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 	//add the idp's certificate
 	if idpCert != "" {
 
-		trustedCerts, ok := ou.helmValues["trusted_certs"].([]interface{})
-		if !ok {
-			trustedCerts = make([]interface{}, 0)
+		trustCertsJson, err := json.Marshal(ou.helmValues["trusted_certs"])
+
+		if err != nil {
+			panic(err)
 		}
+
+		var trustedCerts []helmmodel.TrustedCertsInner
+
+		json.Unmarshal(trustCertsJson, &trustedCerts)
+
+		// trustedCerts, ok := ou.helmValues["trusted_certs"].([]interface{})
+		// if !ok {
+		// 	trustedCerts = make([]interface{}, 0)
+		// }
 
 		foundCert := false
 
 		b64Cert := base64.StdEncoding.EncodeToString([]byte(idpCert))
 
-		for _, c := range trustedCerts {
-			cert := c.(map[string]interface{})
-			if cert["name"] == "trusted-idp" {
-				cert["pem_b64"] = b64Cert
+		for _, cert := range trustedCerts {
+
+			if cert.Name == "trusted-idp" {
+				cert.PemB64 = b64Cert
 				foundCert = true
 				break
-			} else if cert["pem_b64"] == b64Cert {
+			} else if cert.PemB64 == b64Cert {
 				foundCert = true
-				trustedCertAlias = cert["name"].(string)
+				trustedCertAlias = cert.Name
 				break
 			}
 		}
 
 		if !foundCert {
-			trustedCert := make(map[string]string)
-			trustedCert["name"] = "trusted-idp"
-			trustedCert["pem_b64"] = b64Cert
+			trustedCert := &helmmodel.TrustedCertsInner{}
+			trustedCert.Name = "trusted-idp"
+			trustedCert.PemB64 = b64Cert
 
-			trustedCerts = append(trustedCerts, trustedCert)
+			trustedCerts = append(trustedCerts, *trustedCert)
 
-			ou.helmValues["trusted_certs"] = trustedCerts
+			tcjson, err := json.Marshal(trustedCerts)
+
+			if err != nil {
+				panic(err)
+			}
+
+			var tcarray []map[string]string
+			json.Unmarshal(tcjson, &tcarray)
+
+			ou.helmValues["trusted_certs"] = tcarray
 		}
 
 	}
@@ -795,17 +819,32 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 	if naasEnabled && sateliteManagementEnabled {
 		// if the naas is enabled, need to deploy management
 		targetCert := ""
+		var trustedCerts []helmmodel.TrustedCertsInner
+		trustCertsJson, err := json.Marshal(ou.helmValues["trusted_certs"])
 
-		trustedCerts, ok := ou.helmValues["trusted_certs"].([]interface{})
-		if ok {
-			for _, t := range trustedCerts {
-				trustedCert := t.(map[string]interface{})
-				certName := trustedCert["name"].(string)
-				if certName == "unison-ca" {
-					targetCert = trustedCert["pem_b64"].(string)
-				}
+		if err != nil {
+			panic(err)
+		}
+
+		json.Unmarshal(trustCertsJson, &trustedCerts)
+
+		for _, trustedCert := range trustedCerts {
+			certName := trustedCert.Name
+			if certName == "unison-ca" {
+				targetCert = trustedCert.PemB64
 			}
 		}
+
+		// trustedCerts, ok := ou.helmValues["trusted_certs"].([]interface{})
+		// if ok {
+		// 	for _, t := range trustedCerts {
+		// 		trustedCert := t.(map[string]interface{})
+		// 		certName := trustedCert["name"].(string)
+		// 		if certName == "unison-ca" {
+		// 			targetCert = trustedCert["pem_b64"].(string)
+		// 		}
+		// 	}
+		// }
 
 		if targetCert == "" {
 			// not found, load the ou-tls-certificate secret
