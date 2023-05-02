@@ -1,0 +1,16 @@
+swagger: "2.0"
+info:
+  description: "OpenUnison Helm Objects"
+  version: "v1"
+  title: "OpenUnison Helm Objects"
+paths: {}
+definitions:
+  TrustedCerts:
+    type: array
+    items:
+      type: object
+      properties:
+        name:
+          type: string
+        pem_b64:
+          type: string

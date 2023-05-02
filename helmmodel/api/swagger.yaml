@@ -1,0 +1,22 @@
+openapi: 3.0.1
+info:
+  title: OpenUnison Helm Objects
+  description: OpenUnison Helm Objects
+  version: v1
+servers:
+- url: /
+paths: {}
+components:
+  schemas:
+    TrustedCerts:
+      type: array
+      items:
+        $ref: '#/components/schemas/TrustedCerts_inner'
+    TrustedCerts_inner:
+      type: object
+      properties:
+        name:
+          type: string
+        pem_b64:
+          type: string
+x-original-swagger-version: "2.0"
