@@ -45,6 +45,8 @@ var skipClusterManagement bool
 var additionalCharts []string
 var preCharts []string
 
+var namespaceLabels []string
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
@@ -64,6 +66,17 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+}
+
+func parseNamespaceLabels(namespaceLabels *[]string) map[string]string {
+	nsLabelsMap := make(map[string]string)
+
+	for _, labelPair := range *namespaceLabels {
+		split := strings.Split(labelPair, "=")
+		nsLabelsMap[split[0]] = split[1]
+	}
+
+	return nsLabelsMap
 }
 
 func parseChartSlices(additionalCharts *[]string) []openunison.HelmChartInfo {
