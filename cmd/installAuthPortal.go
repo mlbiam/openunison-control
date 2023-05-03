@@ -28,7 +28,7 @@ var installAuthPortalCmd = &cobra.Command{
 
 		pathToValuesYaml = args[0]
 
-		openunisonDeployment, err := openunison.NewOpenUnisonDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, clusterManagementChart, pathToDbPassword, pathToSmtpPassword, skipClusterManagement, parseChartSlices(&additionalCharts), parseChartSlices(&preCharts))
+		openunisonDeployment, err := openunison.NewOpenUnisonDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, clusterManagementChart, pathToDbPassword, pathToSmtpPassword, skipClusterManagement, parseChartSlices(&additionalCharts), parseChartSlices(&preCharts), parseNamespaceLabels(&namespaceLabels))
 
 		if err != nil {
 			panic(err)
@@ -86,6 +86,7 @@ func init() {
 	installAuthPortalCmd.PersistentFlags().StringSliceVarP(&preCharts, "prerun-helm-charts", "u", []string{}, "Comma seperated list of chart=path to deploy charts before OpenUnison is deployed, adding '@version' installs the specific version")
 	installAuthPortalCmd.PersistentFlags().StringSliceVarP(&additionalCharts, "additional-helm-charts", "r", []string{}, "Comma seperated list of chart=path to deploy additional charts after OpenUnison is deployed, adding '@version' installs the specific version")
 
+	installAuthPortalCmd.PersistentFlags().StringSliceVarP(&namespaceLabels, "namespace-labels", "j", []string{}, "Comma separated list of name=value of labels to add to the openunison namespace")
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// installAuthPortalCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")

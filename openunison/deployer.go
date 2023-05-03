@@ -80,11 +80,13 @@ type OpenUnisonDeployment struct {
 
 	additionalCharts []HelmChartInfo
 	preCharts        []HelmChartInfo
+
+	namespaceLabels map[string]string
 }
 
 // creates a new deployment structure
-func NewOpenUnisonDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, clusterManagementChart string, pathToDbPassword string, pathToSmtpPassword string, skipClusterManagement bool, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo) (*OpenUnisonDeployment, error) {
-	ou, err := NewSateliteDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "", "", additionalCharts, preCharts)
+func NewOpenUnisonDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, clusterManagementChart string, pathToDbPassword string, pathToSmtpPassword string, skipClusterManagement bool, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo, namespaceLabels map[string]string) (*OpenUnisonDeployment, error) {
+	ou, err := NewSateliteDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "", "", additionalCharts, preCharts, namespaceLabels)
 
 	if err != nil {
 		return nil, err
@@ -99,7 +101,7 @@ func NewOpenUnisonDeployment(namespace string, operatorChart string, orchestraCh
 }
 
 // creates a new deployment structure
-func NewSateliteDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo) (*OpenUnisonDeployment, error) {
+func NewSateliteDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo, namespaceLabels map[string]string) (*OpenUnisonDeployment, error) {
 	ou := &OpenUnisonDeployment{}
 
 	ou.namespace = namespace
@@ -130,6 +132,8 @@ func NewSateliteDeployment(namespace string, operatorChart string, orchestraChar
 	if err != nil {
 		return nil, err
 	}
+
+	ou.namespaceLabels = namespaceLabels
 
 	return ou, nil
 }
@@ -1721,7 +1725,10 @@ func (ou *OpenUnisonDeployment) checkNamespace(label string, name string) error 
 
 	if err != nil {
 		fmt.Printf("%s namespace %s does not exist, creating\n", label, name)
-		_, err = ou.clientset.CoreV1().Namespaces().Create(context.TODO(), &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name}}, metav1.CreateOptions{})
+
+		openUnisonNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: ou.namespaceLabels}}
+
+		_, err = ou.clientset.CoreV1().Namespaces().Create(context.TODO(), openUnisonNamespace, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}

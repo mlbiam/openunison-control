@@ -32,7 +32,7 @@ var installSateliteCmd = &cobra.Command{
 		controlPlaneCtxName := args[1]
 		sateliteCtxName := args[2]
 
-		openunisonDeployment, err := openunison.NewSateliteDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, controlPlaneCtxName, sateliteCtxName, addClusterChart, pathToSateliteYaml, parseChartSlices(&additionalCharts), parseChartSlices(&preCharts))
+		openunisonDeployment, err := openunison.NewSateliteDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, controlPlaneCtxName, sateliteCtxName, addClusterChart, pathToSateliteYaml, parseChartSlices(&additionalCharts), parseChartSlices(&preCharts), parseNamespaceLabels(&namespaceLabels))
 
 		if err != nil {
 			panic(err)
@@ -59,6 +59,8 @@ func init() {
 	preCharts = make([]string, 0)
 	additionalCharts = make([]string, 0)
 
-	installSateliteCmd.PersistentFlags().StringSliceVarP(&preCharts, "prerun-helm-charts", "u", []string{}, "Comma seperated list of chart=path to deploy charts before OpenUnison is deployed, adding '@version' installs the specific version")
-	installSateliteCmd.PersistentFlags().StringSliceVarP(&additionalCharts, "additional-helm-charts", "r", []string{}, "Comma seperated list of chart=path to deploy additional charts after OpenUnison is deployed, adding '@version' installs the specific version")
+	installSateliteCmd.PersistentFlags().StringSliceVarP(&preCharts, "prerun-helm-charts", "u", []string{}, "Comma separated list of chart=path to deploy charts before OpenUnison is deployed, adding '@version' installs the specific version")
+	installSateliteCmd.PersistentFlags().StringSliceVarP(&additionalCharts, "additional-helm-charts", "r", []string{}, "Comma separated list of chart=path to deploy additional charts after OpenUnison is deployed, adding '@version' installs the specific version")
+
+	installSateliteCmd.PersistentFlags().StringSliceVarP(&namespaceLabels, "namespace-labels", "j", []string{}, "Comma separated list of name=value of labels to add to the openunison namespace")
 }
