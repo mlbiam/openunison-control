@@ -9,13 +9,23 @@ spec:
   description: Deploys OpenUnison, see https://openunison.github.io/deployauth/ for details
   platforms:
   - selector:
-      matchExpressions:
-      - key: "os"
-        operator: "In"
-        values:
-        - darwin
+      matchLabels:
+        os: darwin
+        arch: amd64
     uri: https://nexus.tremolo.io/repository/_REPO_/ouctl-_VERSION_-macos.zip
     sha256: _MAC_SHA_
+    files:
+    - from: "ouctl"
+      to: "ouctl"
+    - from: "LICENSE"
+      to: "LICENSE"
+    bin: ouctl
+  - selector:
+        matchLabels:
+          os: darwin
+          arch: arm64
+    uri: https://nexus.tremolo.io/repository/_REPO_/ouctl-_VERSION_-macos-arm64.zip
+    sha256: _MAC_ARM64_SHA_
     files:
     - from: "ouctl"
       to: "ouctl"
