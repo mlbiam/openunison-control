@@ -32,7 +32,7 @@ var installSateliteCmd = &cobra.Command{
 		controlPlaneCtxName := args[1]
 		sateliteCtxName := args[2]
 
-		openunisonDeployment, err := openunison.NewSateliteDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, controlPlaneCtxName, sateliteCtxName, addClusterChart, pathToSateliteYaml, parseChartSlices(&additionalCharts), parseChartSlices(&preCharts), parseNamespaceLabels(&namespaceLabels))
+		openunisonDeployment, err := openunison.NewSateliteDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, controlPlaneCtxName, sateliteCtxName, addClusterChart, pathToSateliteYaml, parseChartSlices(&additionalCharts), parseChartSlices(&preCharts), parseNamespaceLabels(&namespaceLabels), controlPlaneOrchestraChartName, controlPlaneSecretName)
 
 		if err != nil {
 			panic(err)
@@ -63,4 +63,6 @@ func init() {
 	installSateliteCmd.PersistentFlags().StringSliceVarP(&additionalCharts, "additional-helm-charts", "r", []string{}, "Comma separated list of chart=path to deploy additional charts after OpenUnison is deployed, adding '@version' installs the specific version")
 
 	installSateliteCmd.PersistentFlags().StringSliceVarP(&namespaceLabels, "namespace-labels", "j", []string{}, "Comma separated list of name=value of labels to add to the openunison namespace")
+	installSateliteCmd.PersistentFlags().StringVarP(&controlPlaneOrchestraChartName, "control-plane-orchestra-chart-name", "q", "orchestra", "The name of the orchestra chart on the control plane")
+	installSateliteCmd.PersistentFlags().StringVarP(&controlPlaneSecretName, "control-plane-secret-name", "w", "orchestra-secrets-source", "The name of the secret on the control plane to store client secrets in")
 }

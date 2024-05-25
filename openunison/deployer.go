@@ -82,11 +82,14 @@ type OpenUnisonDeployment struct {
 	preCharts        []HelmChartInfo
 
 	namespaceLabels map[string]string
+
+	cpOrchestraName string
+	cpSecretName    string
 }
 
 // creates a new deployment structure
 func NewOpenUnisonDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, clusterManagementChart string, pathToDbPassword string, pathToSmtpPassword string, skipClusterManagement bool, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo, namespaceLabels map[string]string) (*OpenUnisonDeployment, error) {
-	ou, err := NewSateliteDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "", "", additionalCharts, preCharts, namespaceLabels)
+	ou, err := NewSateliteDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "", "", additionalCharts, preCharts, namespaceLabels, "orchestra", "orchestra-secrets-source")
 
 	if err != nil {
 		return nil, err
@@ -101,7 +104,7 @@ func NewOpenUnisonDeployment(namespace string, operatorChart string, orchestraCh
 }
 
 // creates a new deployment structure
-func NewSateliteDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo, namespaceLabels map[string]string) (*OpenUnisonDeployment, error) {
+func NewSateliteDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo, namespaceLabels map[string]string, cpOrchestraName string, cpSecretName string) (*OpenUnisonDeployment, error) {
 	ou := &OpenUnisonDeployment{}
 
 	ou.namespace = namespace
@@ -134,6 +137,9 @@ func NewSateliteDeployment(namespace string, operatorChart string, orchestraChar
 	}
 
 	ou.namespaceLabels = namespaceLabels
+
+	ou.cpOrchestraName = cpOrchestraName
+	ou.cpSecretName = cpSecretName
 
 	return ou, nil
 }
@@ -474,10 +480,18 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 		}
 	}
 
-	ouSecret, err := ou.clientset.CoreV1().Secrets(ou.namespace).Get(context.TODO(), "orchestra-secrets-source", metav1.GetOptions{})
-
+	ouSecret, err := ou.clientset.CoreV1().Secrets(ou.namespace).Get(context.TODO(), ou.cpSecretName, metav1.GetOptions{})
+	foundSecret := false
 	if err != nil {
-		return err
+		ouSecret = &v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ou.cpSecretName,
+				Namespace: ou.namespace,
+			},
+			Data: map[string][]byte{},
+		}
+	} else {
+		foundSecret = true
 	}
 
 	sateliteClientSecret, ok := ouSecret.Data["cluster-idp-"+clusterName]
@@ -486,7 +500,16 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 		fmt.Println("SSO Client Secret doesn't exist, creating")
 		ou.secret = string(randSeq((64)))
 		ouSecret.Data["cluster-idp-"+clusterName] = []byte(ou.secret)
-		ou.clientset.CoreV1().Secrets(ou.namespace).Update(context.TODO(), ouSecret, metav1.UpdateOptions{})
+
+		if foundSecret {
+			ou.clientset.CoreV1().Secrets(ou.namespace).Update(context.TODO(), ouSecret, metav1.UpdateOptions{})
+		} else {
+			_, err = ou.clientset.CoreV1().Secrets(ou.namespace).Create(context.TODO(), ouSecret, metav1.CreateOptions{})
+			if err != nil {
+				return err
+			}
+		}
+
 		fmt.Println("Created")
 	} else {
 		fmt.Println("SSO client secret already created, retrieving")
@@ -526,7 +549,7 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
 	fmt.Printf("OpenUnison CRD Version : %v\n", ouVersion)
 
-	respBytes, err = ou.clientset.RESTClient().Get().RequestURI("/apis/openunison.tremolo.io/" + ouVersion + "/namespaces/" + ou.namespace + "/openunisons/orchestra").DoRaw(context.TODO())
+	respBytes, err = ou.clientset.RESTClient().Get().RequestURI("/apis/openunison.tremolo.io/" + ouVersion + "/namespaces/" + ou.namespace + "/openunisons/" + ou.cpOrchestraName).DoRaw(context.TODO())
 	if err != nil {
 		return err
 	}
@@ -899,7 +922,8 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 		  "parent": "%v",
 		  "sso": {
 			"enabled": true,
-			"inactivityTimeoutSeconds": 900
+			"inactivityTimeoutSeconds": 900,
+			"client_secret": "%v"
 		  },
 		  "hosts": {
 			"portal": "%v",
@@ -935,6 +959,7 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 		clusterName,
 		clusterName,
 		parentOrg,
+		ou.cpSecretName,
 		sateliteNetwork["openunison_host"].(string),
 		sateliteNetwork["dashboard_host"].(string))
 
