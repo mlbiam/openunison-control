@@ -804,7 +804,14 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 					mgmtProxy["external_suffix"] = naasExternalSuffix
 				}
 
-				openunison["az_groups"] = azRules
+				// if there are pre-set az_groups, they should be honored
+
+				if openunison["az_groups"] != nil {
+					sateliteAzGroups := openunison["az_groups"].([]interface{})
+					openunison["az_groups"] = append(sateliteAzGroups, azRules...)
+				} else {
+					openunison["az_groups"] = azRules
+				}
 
 			}
 		}
