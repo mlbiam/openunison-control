@@ -458,7 +458,7 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 		return fmt.Errorf("k8s_cluster_name must be defined in the satalite values.yaml")
 	}
 
-	satelateReleaseName := "satelite-" + clusterName
+	satelateReleaseName := "satellite-" + clusterName
 
 	settings := cli.New()
 	actionConfig := new(action.Configuration)
