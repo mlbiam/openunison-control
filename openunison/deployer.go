@@ -1364,8 +1364,8 @@ func (ou *OpenUnisonDeployment) locateChart(configChartName string, chartPathOpt
 	chartName := configChartName
 	chartVersion := ""
 	if strings.Contains(configChartName, "@") {
-		chartName = ou.operator.chart[0:strings.Index(ou.operator.chart, "@")]
-		chartVersion = ou.operator.chart[strings.Index(ou.operator.chart, "@")+1:]
+		chartName = configChartName[0:strings.Index(configChartName, "@")]
+		chartVersion = configChartName[strings.Index(configChartName, "@")+1:]
 
 		fmt.Printf("Chart version specified for %s: %s\n", chartName, chartVersion)
 
