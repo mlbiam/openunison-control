@@ -85,6 +85,8 @@ type OpenUnisonDeployment struct {
 
 	cpOrchestraName string
 	cpSecretName    string
+
+	skipCpIntegration bool
 }
 
 // creates a new deployment structure
@@ -104,7 +106,7 @@ func NewOpenUnisonDeployment(namespace string, operatorChart string, orchestraCh
 }
 
 // creates a new deployment structure
-func NewSateliteDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo, namespaceLabels map[string]string, cpOrchestraName string, cpSecretName string) (*OpenUnisonDeployment, error) {
+func NewSateliteDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo, namespaceLabels map[string]string, cpOrchestraName string, cpSecretName string, skipCpIntegration bool) (*OpenUnisonDeployment, error) {
 	ou := &OpenUnisonDeployment{}
 
 	ou.namespace = namespace
@@ -140,6 +142,7 @@ func NewSateliteDeployment(namespace string, operatorChart string, orchestraChar
 
 	ou.cpOrchestraName = cpOrchestraName
 	ou.cpSecretName = cpSecretName
+	ou.skipCpIntegration = skipCpIntegration
 
 	return ou, nil
 }
@@ -850,63 +853,66 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 		return err
 	}
 
-	if naasEnabled && sateliteManagementEnabled {
-		// if the naas is enabled, need to deploy management
-		targetCert := ""
-		var trustedCerts []helmmodel.TrustedCertsInner
-		trustCertsJson, err := json.Marshal(ou.helmValues["trusted_certs"])
+	if !ou.skipCpIntegration {
+		if naasEnabled && sateliteManagementEnabled {
+			// if the naas is enabled, need to deploy management
+			targetCert := ""
+			var trustedCerts []helmmodel.TrustedCertsInner
+			trustCertsJson, err := json.Marshal(ou.helmValues["trusted_certs"])
 
-		if err != nil {
-			panic(err)
-		}
-
-		json.Unmarshal(trustCertsJson, &trustedCerts)
-
-		for _, trustedCert := range trustedCerts {
-			certName := trustedCert.Name
-			if certName == "unison-ca" {
-				targetCert = trustedCert.PemB64
+			if err != nil {
+				panic(err)
 			}
-		}
 
-		// trustedCerts, ok := ou.helmValues["trusted_certs"].([]interface{})
-		// if ok {
-		// 	for _, t := range trustedCerts {
-		// 		trustedCert := t.(map[string]interface{})
-		// 		certName := trustedCert["name"].(string)
-		// 		if certName == "unison-ca" {
-		// 			targetCert = trustedCert["pem_b64"].(string)
-		// 		}
-		// 	}
-		// }
+			json.Unmarshal(trustCertsJson, &trustedCerts)
 
-		if targetCert == "" {
-			// not found, load the ou-tls-certificate secret
-			tlsSecret, err := ou.clientset.CoreV1().Secrets(ou.namespace).Get(context.TODO(), "ou-tls-certificate", metav1.GetOptions{})
-			if err == nil {
-				targetCert = base64.StdEncoding.EncodeToString(tlsSecret.Data["tls.crt"])
+			for _, trustedCert := range trustedCerts {
+				certName := trustedCert.Name
+				if certName == "unison-ca" {
+					targetCert = trustedCert.PemB64
+				}
 			}
-		}
 
-		management := make(map[string]interface{})
-		management["enabled"] = true
-		target := make(map[string]interface{})
-		management["target"] = target
+			// trustedCerts, ok := ou.helmValues["trusted_certs"].([]interface{})
+			// if ok {
+			// 	for _, t := range trustedCerts {
+			// 		trustedCert := t.(map[string]interface{})
+			// 		certName := trustedCert["name"].(string)
+			// 		if certName == "unison-ca" {
+			// 			targetCert = trustedCert["pem_b64"].(string)
+			// 		}
+			// 	}
+			// }
 
-		target["url"] = managementProxyUrl
-		target["tokenType"] = "oidc"
-		target["useToken"] = true
+			if targetCert == "" {
+				// not found, load the ou-tls-certificate secret
+				tlsSecret, err := ou.clientset.CoreV1().Secrets(ou.namespace).Get(context.TODO(), "ou-tls-certificate", metav1.GetOptions{})
+				if err == nil {
+					targetCert = base64.StdEncoding.EncodeToString(tlsSecret.Data["tls.crt"])
+				}
+			}
 
-		if targetCert != "" {
-			target["base64_certificate"] = targetCert
-		}
+			management := make(map[string]interface{})
+			management["enabled"] = true
+			target := make(map[string]interface{})
+			management["target"] = target
 
-		// redeployment satelite integration
-		ou.setCurrentContext(ou.controlPlaneContextName)
-		ou.loadKubernetesConfiguration()
-		shouldReturn, returnValue := ou.integrateSatelite(ou.helmValues, clusterName, err, sateliteIntegrated, actionConfig, satelateReleaseName, settings, management, naasExternalSuffix, externalNaasGroupName, naasRoles)
-		if shouldReturn {
-			return returnValue
+			target["url"] = managementProxyUrl
+			target["tokenType"] = "oidc"
+			target["useToken"] = true
+
+			if targetCert != "" {
+				target["base64_certificate"] = targetCert
+			}
+
+			// redeployment satelite integration
+			ou.setCurrentContext(ou.controlPlaneContextName)
+			ou.loadKubernetesConfiguration()
+			shouldReturn, returnValue := ou.integrateSatelite(ou.helmValues, clusterName, err, sateliteIntegrated, actionConfig, satelateReleaseName, settings, management, naasExternalSuffix, externalNaasGroupName, naasRoles)
+			if shouldReturn {
+				return returnValue
+			}
+
 		}
 
 	}
@@ -916,7 +922,6 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
 	fmt.Println(sateliteIntegrated)
 	fmt.Println(originalContextName)
-
 	return nil
 }
 

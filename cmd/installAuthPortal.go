@@ -78,13 +78,13 @@ func init() {
 	installAuthPortalCmd.PersistentFlags().StringVarP(&pathToDbPassword, "database-secret-path", "b", "", "Path to file containing the database password")
 	installAuthPortalCmd.PersistentFlags().StringVarP(&pathToSmtpPassword, "smtp-secret-path", "t", "", "Path to file containing the smtp password")
 
-	installAuthPortalCmd.PersistentFlags().BoolVarP(&skipClusterManagement, "skip-cluster-management", "k", false, "Set to true if skipping the clister management chart when openunison.enable_provisioning is true")
+	installAuthPortalCmd.PersistentFlags().BoolVarP(&skipClusterManagement, "skip-cluster-management", "k", false, "Set to true if skipping the cluster management chart when openunison.enable_provisioning is true")
 
 	preCharts = make([]string, 0)
 	additionalCharts = make([]string, 0)
 
-	installAuthPortalCmd.PersistentFlags().StringSliceVarP(&preCharts, "prerun-helm-charts", "u", []string{}, "Comma seperated list of chart=path to deploy charts before OpenUnison is deployed, adding '@version' installs the specific version")
-	installAuthPortalCmd.PersistentFlags().StringSliceVarP(&additionalCharts, "additional-helm-charts", "r", []string{}, "Comma seperated list of chart=path to deploy additional charts after OpenUnison is deployed, adding '@version' installs the specific version")
+	installAuthPortalCmd.PersistentFlags().StringSliceVarP(&preCharts, "prerun-helm-charts", "u", []string{}, "Comma separated list of chart=path to deploy charts before OpenUnison is deployed, adding '@version' installs the specific version")
+	installAuthPortalCmd.PersistentFlags().StringSliceVarP(&additionalCharts, "additional-helm-charts", "r", []string{}, "Comma separated list of chart=path to deploy additional charts after OpenUnison is deployed, adding '@version' installs the specific version")
 
 	installAuthPortalCmd.PersistentFlags().StringSliceVarP(&namespaceLabels, "namespace-labels", "j", []string{}, "Comma separated list of name=value of labels to add to the openunison namespace")
 	// Cobra supports local flags which will only run when this command
