@@ -91,7 +91,7 @@ type OpenUnisonDeployment struct {
 
 // creates a new deployment structure
 func NewOpenUnisonDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, clusterManagementChart string, pathToDbPassword string, pathToSmtpPassword string, skipClusterManagement bool, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo, namespaceLabels map[string]string) (*OpenUnisonDeployment, error) {
-	ou, err := NewSateliteDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "", "", additionalCharts, preCharts, namespaceLabels, "orchestra", "orchestra-secrets-source")
+	ou, err := NewSateliteDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "", "", additionalCharts, preCharts, namespaceLabels, "orchestra", "orchestra-secrets-source", false)
 
 	if err != nil {
 		return nil, err
