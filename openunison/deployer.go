@@ -828,9 +828,11 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
 	ioutil.WriteFile(ou.pathToValuesYaml, dataToWrite, 0644)
 
-	shouldReturn, returnValue := ou.integrateSatelite(ou.helmValues, clusterName, err, sateliteIntegrated, actionConfig, satelateReleaseName, settings, nil, "", "", naasRoles)
-	if shouldReturn {
-		return returnValue
+	if !ou.skipCpIntegration {
+		shouldReturn, returnValue := ou.integrateSatelite(ou.helmValues, clusterName, err, sateliteIntegrated, actionConfig, satelateReleaseName, settings, nil, "", "", naasRoles)
+		if shouldReturn {
+			return returnValue
+		}
 	}
 
 	// deploy the satelte
