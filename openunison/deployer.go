@@ -1122,6 +1122,10 @@ func (ou *OpenUnisonDeployment) runChartUpgrade(client *action.Upgrade, name str
 
 // set the secret
 func (ou *OpenUnisonDeployment) setupSecret(helmValues map[string]interface{}) error {
+	if ou.skipCpIntegration {
+		return nil
+	}
+
 	secret, err := ou.clientset.CoreV1().Secrets(ou.namespace).Get(context.TODO(), "orchestra-secrets-source", metav1.GetOptions{})
 	foundSecret := false
 	if err != nil {
