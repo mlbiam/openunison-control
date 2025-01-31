@@ -12,6 +12,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -28,6 +29,8 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/cli"
+
+	"helm.sh/helm/v3/pkg/registry"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -1384,6 +1387,58 @@ func (ou *OpenUnisonDeployment) locateChart(configChartName string, chartPathOpt
 
 	} else {
 		fmt.Printf("No chart version specified for %s\n", chartName)
+	}
+
+	// Check if the chart is using OCI
+	if strings.HasPrefix(chartName, "oci://") {
+		fmt.Printf("OCI chart detected: %s\n", chartName)
+
+		// Step 1: Initialize OCI client
+		ociClient, err := registry.NewClient(
+			registry.ClientOptEnableCache(true),
+			registry.ClientOptDebug(true),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize OCI client: %v", err)
+		}
+
+		// Step 2: Create a temporary directory
+		tempDir, err := os.MkdirTemp("", "helm-oci-*")
+		if err != nil {
+			return nil, fmt.Errorf("failed to create temporary directory: %v", err)
+		}
+		fmt.Printf("Temporary directory created: %s\n", tempDir)
+
+		debugLog := func(format string, v ...interface{}) {
+			fmt.Printf(format+"\n", v...)
+		}
+
+		actionConfig := new(action.Configuration)
+		if err := actionConfig.Init(settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER"), debugLog); err != nil {
+			return nil, fmt.Errorf("failed to initialize Helm action configuration: %v", err)
+		}
+
+		actionConfig.RegistryClient = ociClient
+
+		// Step 3: Pull the chart from the OCI registry
+		pull := action.NewPullWithOpts(action.WithConfig(actionConfig))
+		pull.DestDir = tempDir
+		pull.Version = chartVersion
+		pull.Settings = &cli.EnvSettings{}
+
+		_, err = pull.Run(chartName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to pull OCI chart %s: %v", chartName, err)
+		}
+
+		// Step 4: Load the chart from the temporary directory
+		chartFilePath := filepath.Join(tempDir, filepath.Base(chartName)+"-"+chartVersion+".tgz")
+		chartReq, err := loader.Load(chartFilePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load OCI chart from %s: %v", chartFilePath, err)
+		}
+
+		return chartReq, nil
 	}
 
 	cp, err := chartPathOptions.LocateChart(chartName, settings)

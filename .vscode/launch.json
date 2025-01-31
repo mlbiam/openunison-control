@@ -11,25 +11,18 @@
             "mode": "debug",
             "program": "${workspaceFolder}",
             "args":[
-                "install-auth-portal",
-                "-u", 
-                "hsbc-myvd=/Users/marcboorshtein/Documents/Documents/customers/hsbc/v2/helm-myvd/hsbc-myvd",
-                "--additional-helm-charts=hsbc=/Users/marcboorshtein/Documents/Documents/customers/hsbc/v2/hsbcv2/hsbc-cp", 
+                "install-satelite",
+                "/tmp/ou-test4.yaml", 
+                "-q",
+                "orchestra-cd8e9b8c", 
                 
-                "-s", 
-                "/Users/marcboorshtein/Documents/Documents/customers/hsbc/v3/ldapspassword",
-                "-b", 
-                "/Users/marcboorshtein/Documents/Documents/customers/hsbc/v3/dbpassword",
-                "-t", 
-                "/Users/marcboorshtein/Documents/Documents/customers/hsbc/v3/smtppassword", 
-                "-o",
-                "/Users/marcboorshtein/git-local/helm-charts/openunison-operator",
-                "-c", 
-                "/Users/marcboorshtein/git-local/helm-charts/orchestra",  
-                "/Users/marcboorshtein/Documents/Documents/customers/hsbc/v3/values-hsbcv3.yaml"
+                "-w", 
+                "sat-client-secrets",
+                "openunison-cp", 
+                "vcluster_test4_test4_openunison-kubernetes-dev"
             ],
             "env": {
-                "KUBECONFIG": "/Users/marcboorshtein/.kube/hsbc-v3.conf"
+                "KUBECONFIG": "/tmp/debugouctl"
             }
         }
     ]
