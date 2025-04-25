@@ -90,6 +90,8 @@ type OpenUnisonDeployment struct {
 	cpSecretName    string
 
 	skipCpIntegration bool
+
+	extraAzGroups []interface{}
 }
 
 // creates a new deployment structure
@@ -777,8 +779,10 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 	sateliteManagementEnabled := false
 	mgmtProxy := make(map[string]interface{})
 
+	openunison := ou.helmValues["openunison"].(map[string]interface{})
+
 	if naasEnabled {
-		openunison := ou.helmValues["openunison"].(map[string]interface{})
+
 		mgmtProxy, sateliteManagementEnabled = openunison["management_proxy"].(map[string]interface{})
 
 		if sateliteManagementEnabled {
@@ -823,6 +827,11 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 		}
 	}
 
+	ou.extraAzGroups = openunison["extra_az_groups"].([]interface{})
+	if openunison["extra_az_groups"] != nil {
+		ou.extraAzGroups = openunison["extra_az_groups"].([]interface{})
+
+	}
 	dataToWrite, err := yaml.Marshal(&ou.helmValues)
 
 	if err != nil {
@@ -1008,6 +1017,16 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 		}
 
 		cpValues["cluster"].(map[string]interface{})["az_groups"] = cpAzGroups
+	}
+
+	if ou.extraAzGroups != nil {
+		cpExtraAzGroups := make([]string, len(ou.extraAzGroups))
+
+		for i, group := range ou.extraAzGroups {
+			cpExtraAzGroups[i] = fmt.Sprintf("%v", group)
+		}
+
+		cpValues["cluster"].(map[string]interface{})["extra_az_groups"] = cpExtraAzGroups
 	}
 
 	if openunison != nil {
