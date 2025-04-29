@@ -827,7 +827,6 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 		}
 	}
 
-	ou.extraAzGroups = openunison["extra_az_groups"].([]interface{})
 	if openunison["extra_az_groups"] != nil {
 		ou.extraAzGroups = openunison["extra_az_groups"].([]interface{})
 
