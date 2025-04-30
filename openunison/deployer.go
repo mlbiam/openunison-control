@@ -56,6 +56,18 @@ type HelmChartInfo struct {
 	ChartPath string
 }
 
+// Stores an AzRule
+type AzRule struct {
+	Constraint string `json:"constraint"`
+	Scope      string `json:"scope"`
+}
+
+// tracks if requests should be isolated
+type IsolateRequestAccess struct {
+	Enabled bool     `json:"enabled"`
+	AzRules []AzRule `json:"azRules"`
+}
+
 // tracks the information about the deployment
 type OpenUnisonDeployment struct {
 	namespace                 string
@@ -92,6 +104,9 @@ type OpenUnisonDeployment struct {
 	skipCpIntegration bool
 
 	extraAzGroups []interface{}
+
+	IsolatateRequestAccess IsolateRequestAccess
+	approversGroup         string
 }
 
 // creates a new deployment structure
@@ -112,7 +127,7 @@ func NewOpenUnisonDeployment(namespace string, operatorChart string, orchestraCh
 
 // creates a new deployment structure
 func NewSateliteDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo, namespaceLabels map[string]string, cpOrchestraName string, cpSecretName string, skipCpIntegration bool) (*OpenUnisonDeployment, error) {
-	ou := &OpenUnisonDeployment{}
+	ou := &OpenUnisonDeployment{IsolatateRequestAccess: IsolateRequestAccess{Enabled: false, AzRules: make([]AzRule, 0)}}
 
 	ou.namespace = namespace
 
@@ -630,6 +645,23 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
 			naasRoles = append(naasRoles, localRoles...)
 
+		} else if nsdName == "openunison.naas.internal-isolateRequestAccess" {
+			enc, err := base64.StdEncoding.DecodeString(nsd.Value)
+			if err != nil {
+				return err
+			}
+
+			err = json.Unmarshal(enc, &ou.IsolatateRequestAccess)
+
+			if err != nil {
+				return err
+			}
+
+			// need the important info from the isolate structure
+
+		} else if nsdName == "openunison.naas.external.approversGroup" {
+
+			ou.approversGroup = string(nsd.Value)
 		}
 
 	}
@@ -1037,6 +1069,22 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 				cpValues["cluster"].(map[string]interface{})["additional_badges"] = additionalBadges
 			}
 		}
+	}
+
+	if ou.IsolatateRequestAccess.Enabled {
+		cpValues["cluster"].(map[string]interface{})["enable_request_access"] = !ou.IsolatateRequestAccess.Enabled
+		var requestAzRules []map[string]interface{}
+		for _, rule := range ou.IsolatateRequestAccess.AzRules {
+			ruleMap := make(map[string]interface{})
+			ruleMap["scope"] = rule.Scope
+			ruleMap["constraint"] = rule.Constraint
+			requestAzRules = append(requestAzRules, ruleMap)
+		}
+		cpValues["cluster"].(map[string]interface{})["az_request_access"] = requestAzRules
+	}
+
+	if ou.approversGroup != "" {
+		cpValues["cluster"].(map[string]interface{})["approvers_group"] = "k8s-namespace-" + ou.approversGroup + "-"
 	}
 
 	cpValues["naasRoles"] = naasRoles
