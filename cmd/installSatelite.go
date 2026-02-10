@@ -67,4 +67,5 @@ func init() {
 	installSateliteCmd.PersistentFlags().StringVarP(&controlPlaneSecretName, "control-plane-secret-name", "w", "orchestra-secrets-source", "The name of the secret on the control plane to store client secrets in")
 
 	installSateliteCmd.PersistentFlags().BoolVarP(&skipCPIntegration, "skip-controlplane-integration", "k", false, "Set to true if skipping the control plane integration step.  Used when upgrading a satelite.")
+	installSateliteCmd.PersistentFlags().StringSliceVarP(&skipCharts, "skip-charts", "i", []string{}, "Comma separated list of charts to skip during the deployment.  May be used to run 'hot upgrades' that doesn't require restarts")
 }

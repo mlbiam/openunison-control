@@ -107,6 +107,8 @@ type OpenUnisonDeployment struct {
 
 	IsolatateRequestAccess IsolateRequestAccess
 	approversGroup         string
+
+	skipCharts map[string]bool
 }
 
 // creates a new deployment structure
@@ -126,7 +128,7 @@ func NewOpenUnisonDeployment(namespace string, operatorChart string, orchestraCh
 }
 
 // creates a new deployment structure
-func NewSateliteDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo, namespaceLabels map[string]string, cpOrchestraName string, cpSecretName string, skipCpIntegration bool) (*OpenUnisonDeployment, error) {
+func NewSateliteDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo, namespaceLabels map[string]string, cpOrchestraName string, cpSecretName string, skipCpIntegration bool, skipCharts []string) (*OpenUnisonDeployment, error) {
 	ou := &OpenUnisonDeployment{IsolatateRequestAccess: IsolateRequestAccess{Enabled: false, AzRules: make([]AzRule, 0)}}
 
 	ou.namespace = namespace
@@ -163,6 +165,10 @@ func NewSateliteDeployment(namespace string, operatorChart string, orchestraChar
 	ou.cpOrchestraName = cpOrchestraName
 	ou.cpSecretName = cpSecretName
 	ou.skipCpIntegration = skipCpIntegration
+
+	for chartToSkip := range skipCharts {
+		ou.skipCharts[skipCharts[chartToSkip]] = true
+	}
 
 	return ou, nil
 }
@@ -1365,6 +1371,11 @@ func (ou *OpenUnisonDeployment) DeployPreCharts() error {
 // deploys additional charts after OpenUnison is running
 func (ou *OpenUnisonDeployment) deployChart(chart HelmChartInfo) error {
 	fmt.Printf("Deploying chart %s, %s\n", chart.Name, chart.ChartPath)
+
+	if !ou.skipCharts[chart.Name] {
+		fmt.Printf("Chart %s skipped\n", chart.Name)
+		return nil
+	}
 
 	settings := cli.New()
 	actionConfig := new(action.Configuration)
