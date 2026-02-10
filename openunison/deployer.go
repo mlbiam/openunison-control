@@ -1374,7 +1374,7 @@ func (ou *OpenUnisonDeployment) DeployPreCharts() error {
 func (ou *OpenUnisonDeployment) deployChart(chart HelmChartInfo) error {
 	fmt.Printf("Deploying chart %s, %s\n", chart.Name, chart.ChartPath)
 
-	if !ou.skipCharts[chart.Name] {
+	if ou.skipCharts[chart.Name] {
 		fmt.Printf("Chart %s skipped\n", chart.Name)
 		return nil
 	}
@@ -1615,51 +1615,55 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 	}
 
 	//if !openunisonDeployed {
-	fmt.Print("Deploying the OpenUnison Operator\n")
-
-	if !openunisonDeployed {
-		fmt.Println("Chart not deployed, installing")
-		client := action.NewInstall(actionConfig)
-
-		client.Namespace = ou.namespace
-		client.ReleaseName = "openunison"
-
-		chartReq, err := ou.locateChart(ou.operator.chart, &client.ChartPathOptions, settings)
-
-		if err != nil {
-			return err
-		}
-
-		//_, err = client.Run(chartReq, vals)
-		_, err = ou.runChartInstall(client, client.ReleaseName, chartReq, ou.helmValues, actionConfig)
-
-		if err != nil {
-			return err
-		}
+	if ou.skipCharts["openunison"] {
+		fmt.Print("Skipping the OpenUnison Operator deployment\n")
 	} else {
-		fmt.Println("Chart deployed, upgrading")
-		client := action.NewUpgrade(actionConfig)
+		fmt.Print("Deploying the OpenUnison Operator\n")
 
-		client.Namespace = ou.namespace
+		if !openunisonDeployed {
+			fmt.Println("Chart not deployed, installing")
+			client := action.NewInstall(actionConfig)
 
-		chartReq, err := ou.locateChart(ou.operator.chart, &client.ChartPathOptions, settings)
+			client.Namespace = ou.namespace
+			client.ReleaseName = "openunison"
 
+			chartReq, err := ou.locateChart(ou.operator.chart, &client.ChartPathOptions, settings)
+
+			if err != nil {
+				return err
+			}
+
+			//_, err = client.Run(chartReq, vals)
+			_, err = ou.runChartInstall(client, client.ReleaseName, chartReq, ou.helmValues, actionConfig)
+
+			if err != nil {
+				return err
+			}
+		} else {
+			fmt.Println("Chart deployed, upgrading")
+			client := action.NewUpgrade(actionConfig)
+
+			client.Namespace = ou.namespace
+
+			chartReq, err := ou.locateChart(ou.operator.chart, &client.ChartPathOptions, settings)
+
+			if err != nil {
+				return err
+			}
+
+			_, err = ou.runChartUpgrade(client, "openunison", chartReq, ou.helmValues)
+
+			if err != nil {
+				return err
+			}
+		}
+
+		// wait until the operator is up and running
+
+		err = waitForDeployment(ou, "openunison-operator")
 		if err != nil {
 			return err
 		}
-
-		_, err = ou.runChartUpgrade(client, "openunison", chartReq, ou.helmValues)
-
-		if err != nil {
-			return err
-		}
-	}
-
-	// wait until the operator is up and running
-
-	err = waitForDeployment(ou, "openunison-operator")
-	if err != nil {
-		return err
 	}
 
 	fmt.Println("Checking for a previously failed run")
@@ -1678,165 +1682,173 @@ func (ou *OpenUnisonDeployment) DeployAuthPortal() error {
 		fmt.Println("Deleted test-orchestra-orchestra")
 	}
 
-	fmt.Println("Deploying the orchestra chart")
-
-	var deployErr error
-
-	if !orchestraDeployed {
-		// deploy orchestra, make sure that it deploys
-
-		fmt.Println("Orchestra doesn't exist, installing")
-
-		client := action.NewInstall(actionConfig)
-
-		client.Namespace = ou.namespace
-		client.ReleaseName = "orchestra"
-
-		chartReq, err := ou.locateChart(ou.orchestraChart, &client.ChartPathOptions, settings)
-
-		if err != nil {
-			return err
-		}
-
-		mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
-
-		//_, deployErr = client.Run(chartReq, mergedValues)
-		_, deployErr = ou.runChartInstall(client, client.ReleaseName, chartReq, mergedValues, actionConfig)
-
+	if ou.skipCharts["orchestra"] {
+		fmt.Println("Skipping the orchestra chart")
 	} else {
-		// deploy orchestra, make sure that it deploys
+		fmt.Println("Deploying the orchestra chart")
 
-		fmt.Println("Orchestra exists, upgrading")
+		var deployErr error
 
-		client := action.NewUpgrade(actionConfig)
+		if !orchestraDeployed {
+			// deploy orchestra, make sure that it deploys
 
-		client.Namespace = ou.namespace
+			fmt.Println("Orchestra doesn't exist, installing")
 
-		chartReq, err := ou.locateChart(ou.orchestraChart, &client.ChartPathOptions, settings)
+			client := action.NewInstall(actionConfig)
 
-		if err != nil {
-			return err
-		}
+			client.Namespace = ou.namespace
+			client.ReleaseName = "orchestra"
 
-		mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
+			chartReq, err := ou.locateChart(ou.orchestraChart, &client.ChartPathOptions, settings)
 
-		//_, deployErr = client.Run("orchestra", chartReq, mergedValues)
-		_, deployErr = ou.runChartUpgrade(client, "orchestra", chartReq, mergedValues)
-	}
-
-	if deployErr != nil {
-
-		_, err = ou.clientset.CoreV1().Pods(ou.namespace).Get(context.TODO(), "test-orchestra-orchestra", metav1.GetOptions{})
-
-		if err == nil {
-			fmt.Println("Failed prechecks:")
-
-			req := ou.clientset.CoreV1().Pods(ou.namespace).GetLogs("test-orchestra-orchestra", &v1.PodLogOptions{})
-			podLogs, err := req.Stream(context.TODO())
 			if err != nil {
 				return err
 			}
-			defer podLogs.Close()
 
-			buf := new(bytes.Buffer)
-			_, err = io.Copy(buf, podLogs)
-			if err != nil {
-				return err
-			}
-			str := buf.String()
+			mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
 
-			fmt.Println(str)
-			return nil
+			//_, deployErr = client.Run(chartReq, mergedValues)
+			_, deployErr = ou.runChartInstall(client, client.ReleaseName, chartReq, mergedValues, actionConfig)
+
 		} else {
-			return deployErr
+			// deploy orchestra, make sure that it deploys
+
+			fmt.Println("Orchestra exists, upgrading")
+
+			client := action.NewUpgrade(actionConfig)
+
+			client.Namespace = ou.namespace
+
+			chartReq, err := ou.locateChart(ou.orchestraChart, &client.ChartPathOptions, settings)
+
+			if err != nil {
+				return err
+			}
+
+			mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
+
+			//_, deployErr = client.Run("orchestra", chartReq, mergedValues)
+			_, deployErr = ou.runChartUpgrade(client, "orchestra", chartReq, mergedValues)
 		}
 
-		return err
-	}
+		if deployErr != nil {
 
-	// wait until the orchestra container is running
-	fmt.Printf("Waiting for a few seconds for the operator to run")
-	time.Sleep(5 * time.Second)
-	err = waitForDeployment(ou, "openunison-orchestra")
-	if err != nil {
-		return err
-	}
+			_, err = ou.clientset.CoreV1().Pods(ou.namespace).Get(context.TODO(), "test-orchestra-orchestra", metav1.GetOptions{})
 
-	fmt.Printf("Waiting for a few seconds for the webhooks to settle to run")
-	time.Sleep(10 * time.Second)
+			if err == nil {
+				fmt.Println("Failed prechecks:")
 
-	fmt.Println("Deploying the orchestra-login-portal chart")
+				req := ou.clientset.CoreV1().Pods(ou.namespace).GetLogs("test-orchestra-orchestra", &v1.PodLogOptions{})
+				podLogs, err := req.Stream(context.TODO())
+				if err != nil {
+					return err
+				}
+				defer podLogs.Close()
 
-	if !orchestraLoginPortalDeployed {
+				buf := new(bytes.Buffer)
+				_, err = io.Copy(buf, podLogs)
+				if err != nil {
+					return err
+				}
+				str := buf.String()
 
-		// deploy the orchestra-login-portal charts
-		fmt.Println("orchestra-login-portal not deployed, installing")
+				fmt.Println(str)
+				return nil
+			} else {
+				return deployErr
+			}
 
-		client := action.NewInstall(actionConfig)
-
-		client.Namespace = ou.namespace
-		client.ReleaseName = "orchestra-login-portal"
-
-		chartReq, err := ou.locateChart(ou.orchestraLoginPortalChart, &client.ChartPathOptions, settings)
-
-		if err != nil {
-			return err
-		}
-
-		mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
-
-		//_, err = client.Run(chartReq, mergedValues)
-		_, err = ou.runChartInstall(client, client.ReleaseName, chartReq, mergedValues, actionConfig)
-
-		if err != nil {
 			return err
 		}
 
 		// wait until the orchestra container is running
-
-		err = waitForDeployment(ou, "ouhtml-orchestra-login-portal")
+		fmt.Printf("Waiting for a few seconds for the operator to run")
+		time.Sleep(5 * time.Second)
+		err = waitForDeployment(ou, "openunison-orchestra")
 		if err != nil {
 			return err
 		}
 
-		network := mergedValues["network"].(map[string]interface{})
-		ouHost := network["openunison_host"]
+		fmt.Printf("Waiting for a few seconds for the webhooks to settle to run")
+		time.Sleep(10 * time.Second)
+	}
 
-		fmt.Printf("OpenUnison is deployed!  Visit https://%v/ to login to your cluster!\n", ouHost)
+	if ou.skipCharts["orchestra-login-portal"] {
+		fmt.Println("Skipping the orchestra-login-portal chart")
 	} else {
-		// deploy the orchestra-login-portal charts
-		fmt.Println("orchestra-login-portal deployed, upgrading")
+		fmt.Println("Deploying the orchestra-login-portal chart")
 
-		client := action.NewUpgrade(actionConfig)
+		if !orchestraLoginPortalDeployed {
 
-		client.Namespace = ou.namespace
+			// deploy the orchestra-login-portal charts
+			fmt.Println("orchestra-login-portal not deployed, installing")
 
-		chartReq, err := ou.locateChart(ou.orchestraLoginPortalChart, &client.ChartPathOptions, settings)
+			client := action.NewInstall(actionConfig)
 
-		if err != nil {
-			return err
+			client.Namespace = ou.namespace
+			client.ReleaseName = "orchestra-login-portal"
+
+			chartReq, err := ou.locateChart(ou.orchestraLoginPortalChart, &client.ChartPathOptions, settings)
+
+			if err != nil {
+				return err
+			}
+
+			mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
+
+			//_, err = client.Run(chartReq, mergedValues)
+			_, err = ou.runChartInstall(client, client.ReleaseName, chartReq, mergedValues, actionConfig)
+
+			if err != nil {
+				return err
+			}
+
+			// wait until the orchestra container is running
+
+			err = waitForDeployment(ou, "ouhtml-orchestra-login-portal")
+			if err != nil {
+				return err
+			}
+
+			network := mergedValues["network"].(map[string]interface{})
+			ouHost := network["openunison_host"]
+
+			fmt.Printf("OpenUnison is deployed!  Visit https://%v/ to login to your cluster!\n", ouHost)
+		} else {
+			// deploy the orchestra-login-portal charts
+			fmt.Println("orchestra-login-portal deployed, upgrading")
+
+			client := action.NewUpgrade(actionConfig)
+
+			client.Namespace = ou.namespace
+
+			chartReq, err := ou.locateChart(ou.orchestraLoginPortalChart, &client.ChartPathOptions, settings)
+
+			if err != nil {
+				return err
+			}
+
+			mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
+
+			//_, err = client.Run("orchestra-login-portal", chartReq, mergedValues)
+			_, err = ou.runChartUpgrade(client, "orchestra-login-portal", chartReq, mergedValues)
+
+			if err != nil {
+				return err
+			}
+
+			// wait until the orchestra container is running
+
+			err = waitForDeployment(ou, "ouhtml-orchestra-login-portal")
+			if err != nil {
+				return err
+			}
+
+			network := mergedValues["network"].(map[string]interface{})
+			ouHost := network["openunison_host"]
+
+			fmt.Printf("OpenUnison is deployed!  Visit https://%v/ to login to your cluster!\n", ouHost)
 		}
-
-		mergedValues := mergeMaps(chartReq.Values, ou.helmValues)
-
-		//_, err = client.Run("orchestra-login-portal", chartReq, mergedValues)
-		_, err = ou.runChartUpgrade(client, "orchestra-login-portal", chartReq, mergedValues)
-
-		if err != nil {
-			return err
-		}
-
-		// wait until the orchestra container is running
-
-		err = waitForDeployment(ou, "ouhtml-orchestra-login-portal")
-		if err != nil {
-			return err
-		}
-
-		network := mergedValues["network"].(map[string]interface{})
-		ouHost := network["openunison_host"]
-
-		fmt.Printf("OpenUnison is deployed!  Visit https://%v/ to login to your cluster!\n", ouHost)
 	}
 	// all done!
 
