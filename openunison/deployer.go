@@ -166,6 +166,8 @@ func NewSateliteDeployment(namespace string, operatorChart string, orchestraChar
 	ou.cpSecretName = cpSecretName
 	ou.skipCpIntegration = skipCpIntegration
 
+	ou.skipCharts = map[string]bool{}
+
 	for chartToSkip := range skipCharts {
 		ou.skipCharts[skipCharts[chartToSkip]] = true
 	}
