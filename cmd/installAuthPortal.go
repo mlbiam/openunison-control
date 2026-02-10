@@ -28,7 +28,7 @@ var installAuthPortalCmd = &cobra.Command{
 
 		pathToValuesYaml = args[0]
 
-		openunisonDeployment, err := openunison.NewOpenUnisonDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, clusterManagementChart, pathToDbPassword, pathToSmtpPassword, skipClusterManagement, parseChartSlices(&additionalCharts), parseChartSlices(&preCharts), parseNamespaceLabels(&namespaceLabels))
+		openunisonDeployment, err := openunison.NewOpenUnisonDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, clusterManagementChart, pathToDbPassword, pathToSmtpPassword, skipClusterManagement, parseChartSlices(&additionalCharts), parseChartSlices(&preCharts), parseNamespaceLabels(&namespaceLabels), skipCharts)
 
 		if err != nil {
 			panic(err)
