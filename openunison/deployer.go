@@ -3,6 +3,8 @@ package openunison
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"flag"
@@ -11,6 +13,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -109,11 +112,13 @@ type OpenUnisonDeployment struct {
 	approversGroup         string
 
 	skipCharts map[string]bool
+
+	ociCaCertPath string
 }
 
 // creates a new deployment structure
-func NewOpenUnisonDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, clusterManagementChart string, pathToDbPassword string, pathToSmtpPassword string, skipClusterManagement bool, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo, namespaceLabels map[string]string, skipCharts []string) (*OpenUnisonDeployment, error) {
-	ou, err := NewSateliteDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "", "", additionalCharts, preCharts, namespaceLabels, "orchestra", "orchestra-secrets-source", false, skipCharts)
+func NewOpenUnisonDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, clusterManagementChart string, pathToDbPassword string, pathToSmtpPassword string, skipClusterManagement bool, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo, namespaceLabels map[string]string, skipCharts []string, ociCaCertPath string) (*OpenUnisonDeployment, error) {
+	ou, err := NewSateliteDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, "", "", "", "", additionalCharts, preCharts, namespaceLabels, "orchestra", "orchestra-secrets-source", false, skipCharts, ociCaCertPath)
 
 	if err != nil {
 		return nil, err
@@ -128,7 +133,7 @@ func NewOpenUnisonDeployment(namespace string, operatorChart string, orchestraCh
 }
 
 // creates a new deployment structure
-func NewSateliteDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo, namespaceLabels map[string]string, cpOrchestraName string, cpSecretName string, skipCpIntegration bool, skipCharts []string) (*OpenUnisonDeployment, error) {
+func NewSateliteDeployment(namespace string, operatorChart string, orchestraChart string, orchestraLoginPortalChart string, pathToValuesYaml string, secretFile string, controlPlanContextName string, sateliteContextName string, addClusterChart string, pathToSateliteYaml string, additionalCharts []HelmChartInfo, preCharts []HelmChartInfo, namespaceLabels map[string]string, cpOrchestraName string, cpSecretName string, skipCpIntegration bool, skipCharts []string, ociCaCertPath string) (*OpenUnisonDeployment, error) {
 	ou := &OpenUnisonDeployment{IsolatateRequestAccess: IsolateRequestAccess{Enabled: false, AzRules: make([]AzRule, 0)}}
 
 	ou.namespace = namespace
@@ -171,6 +176,8 @@ func NewSateliteDeployment(namespace string, operatorChart string, orchestraChar
 	for chartToSkip := range skipCharts {
 		ou.skipCharts[skipCharts[chartToSkip]] = true
 	}
+
+	ou.ociCaCertPath = ociCaCertPath
 
 	return ou, nil
 }
@@ -1472,14 +1479,53 @@ func (ou *OpenUnisonDeployment) locateChart(configChartName string, chartPathOpt
 	if strings.HasPrefix(chartName, "oci://") {
 		fmt.Printf("OCI chart detected: %s\n", chartName)
 
-		// Step 1: Initialize OCI client
-		ociClient, err := registry.NewClient(
-			registry.ClientOptEnableCache(true),
-			registry.ClientOptDebug(true),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize OCI client: %v", err)
+		var ociClient *registry.Client
+
+		if ou.ociCaCertPath != "" {
+
+			// there's a ca cert
+			var err error
+			caCert, err := os.ReadFile(ou.ociCaCertPath)
+			if err != nil {
+				panic(err)
+			}
+
+			caPool := x509.NewCertPool()
+			if ok := caPool.AppendCertsFromPEM(caCert); !ok {
+				panic("failed to append CA cert")
+			}
+
+			tlsConfig := &tls.Config{
+				RootCAs: caPool,
+			}
+
+			httpClient := &http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: tlsConfig,
+				},
+			}
+
+			ociClient, err = registry.NewClient(
+				registry.ClientOptEnableCache(true),
+				registry.ClientOptDebug(true),
+				registry.ClientOptHTTPClient(httpClient),
+			)
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to initialize OCI client: %v", err)
+			}
+		} else {
+			var err error
+			ociClient, err = registry.NewClient(
+				registry.ClientOptEnableCache(true),
+				registry.ClientOptDebug(true),
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to initialize OCI client: %v", err)
+			}
 		}
+
+		// Step 1: Initialize OCI client
 
 		// Step 2: Create a temporary directory
 		tempDir, err := os.MkdirTemp("", "helm-oci-*")

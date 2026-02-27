@@ -32,7 +32,7 @@ var installSateliteCmd = &cobra.Command{
 		controlPlaneCtxName := args[1]
 		sateliteCtxName := args[2]
 
-		openunisonDeployment, err := openunison.NewSateliteDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, controlPlaneCtxName, sateliteCtxName, addClusterChart, pathToSateliteYaml, parseChartSlices(&additionalCharts), parseChartSlices(&preCharts), parseNamespaceLabels(&namespaceLabels), controlPlaneOrchestraChartName, controlPlaneSecretName, skipCPIntegration, skipCharts)
+		openunisonDeployment, err := openunison.NewSateliteDeployment(namespace, operatorChart, orchestraChart, orchestraLoginPortalChart, pathToValuesYaml, secretFile, controlPlaneCtxName, sateliteCtxName, addClusterChart, pathToSateliteYaml, parseChartSlices(&additionalCharts), parseChartSlices(&preCharts), parseNamespaceLabels(&namespaceLabels), controlPlaneOrchestraChartName, controlPlaneSecretName, skipCPIntegration, skipCharts, ociCaCertPath)
 
 		if err != nil {
 			panic(err)
@@ -68,4 +68,6 @@ func init() {
 
 	installSateliteCmd.PersistentFlags().BoolVarP(&skipCPIntegration, "skip-controlplane-integration", "k", false, "Set to true if skipping the control plane integration step.  Used when upgrading a satelite.")
 	installSateliteCmd.PersistentFlags().StringSliceVarP(&skipCharts, "skip-charts", "i", []string{}, "Comma separated list of charts to skip during the deployment.  May be used to run 'hot upgrades' that doesn't require restarts")
+
+	installSateliteCmd.PersistentFlags().StringVarP(&ociCaCertPath, "oci-cacert-path", "p", "", "Path to a PEM file containing the CA certificate")
 }
