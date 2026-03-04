@@ -857,7 +857,11 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
 				if naasGroupsExternal {
 					azRules = append(azRules, fmt.Sprintf("k8s-cluster-k8s-%v-administrators%v", clusterName, naasExternalSuffix))
-					externalNaasGroupName = mgmtProxy["external_admin_group"].(string)
+					externalNaasGroupName = ""
+					if s, ok := mgmtProxy["external_admin_group"].(string); ok {
+						externalNaasGroupName = s
+					}
+
 					mgmtProxy["external_suffix"] = naasExternalSuffix
 				}
 
