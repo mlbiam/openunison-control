@@ -35,6 +35,7 @@ import (
 
 	"helm.sh/helm/v3/pkg/registry"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 )
@@ -1915,6 +1916,11 @@ func waitForDeployment(ou *OpenUnisonDeployment, deploymentName string) error {
 		dep, err := ou.clientset.AppsV1().Deployments(ou.namespace).Get(context.TODO(), deploymentName, metav1.GetOptions{})
 
 		if err != nil {
+			if apierrors.IsNotFound(err) {
+				// deployment does not exist
+				fmt.Printf("Deployment %s not found, assume it wasn't deployed and will not wait for the pods to be ready\n", deploymentName)
+				return nil
+			}
 			return err
 		}
 
