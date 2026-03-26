@@ -959,6 +959,13 @@ func (ou *OpenUnisonDeployment) DeployOpenUnisonSatelite() error {
 
 			management := make(map[string]interface{})
 			management["enabled"] = true
+
+			if ! naasGroupsInternal {
+				managementInternal := make(map[string]interface{})
+				managementInternal["enabled"] = false;
+				management["internal"] = managementInternal;
+			}
+
 			target := make(map[string]interface{})
 			management["target"] = target
 
@@ -1057,6 +1064,8 @@ func (ou *OpenUnisonDeployment) integrateSatelite(helmValues map[string]interfac
 			cluster["external_group_name"] = externalGroupName
 			cluster["external_group_name_suffix"] = externalGroupNameSuffix
 		}
+
+
 	}
 
 	if helmValues["openunison"].(map[string]interface{})["az_groups"] != nil {
